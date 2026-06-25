@@ -15,6 +15,7 @@ dependencies = [
     "poliastro",
     "ppigrf",
     "pymap3d",
+    "scipy",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -2,8 +2,13 @@
 
 from pathlib import Path
 
+import numpy as np
+from matplotlib import animation
 import matplotlib.pyplot as plt
 import pandas as pd
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+from simulation.attitude import quaternion_to_rotation_matrix
 
 
 def plot_position_eci(df: pd.DataFrame, output_dir: Path) -> None:
@@ -163,3 +168,158 @@ def plot_magnetic_field_norm(df: pd.DataFrame, output_dir: Path) -> None:
     plt.tight_layout()
     plt.savefig(output_dir / "magnetic_field_norm.png", dpi=200)
     plt.close()
+
+
+def plot_magnetic_field_body(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot IGRF magnetic-field components in body coordinates."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    plt.figure()
+    plt.plot(df["t_s"], df["Bx_body_T"] * 1e6, label="Bx body")
+    plt.plot(df["t_s"], df["By_body_T"] * 1e6, label="By body")
+    plt.plot(df["t_s"], df["Bz_body_T"] * 1e6, label="Bz body")
+    plt.xlabel("Time [s]")
+    plt.ylabel("Magnetic field [uT]")
+    plt.title("IGRF magnetic field in body")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(output_dir / "magnetic_field_body.png", dpi=200)
+    plt.close()
+
+
+def plot_magnetic_field_body_norm(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot norm of the body-frame IGRF magnetic-field vector."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    plt.figure()
+    plt.plot(df["t_s"], df["B_body_norm_T"] * 1e6)
+    plt.xlabel("Time [s]")
+    plt.ylabel("|B_body| [uT]")
+    plt.title("Body magnetic-field norm")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(output_dir / "magnetic_field_body_norm.png", dpi=200)
+    plt.close()
+
+
+def plot_attitude_orientation(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot body orientation angles over time."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    plt.figure()
+    plt.plot(df["t_s"], df["yaw_eci_from_body_deg"], label="yaw")
+    plt.plot(df["t_s"], df["pitch_eci_from_body_deg"], label="pitch")
+    plt.plot(df["t_s"], df["roll_eci_from_body_deg"], label="roll")
+    plt.xlabel("Time [s]")
+    plt.ylabel("Angle [deg]")
+    plt.title("Body orientation over time")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(output_dir / "attitude_orientation.png", dpi=200)
+    plt.close()
+
+
+def _cube_vertices() -> np.ndarray:
+    """Create unit cube vertices in body coordinates."""
+
+    return np.array(
+        [
+            [-1.0, -1.0, -1.0],
+            [1.0, -1.0, -1.0],
+            [1.0, 1.0, -1.0],
+            [-1.0, 1.0, -1.0],
+            [-1.0, -1.0, 1.0],
+            [1.0, -1.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [-1.0, 1.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+
+
+def _cube_faces(vertices: np.ndarray) -> list[np.ndarray]:
+    """Create cube faces from transformed vertices."""
+
+    face_indices = [
+        [0, 1, 2, 3],
+        [4, 5, 6, 7],
+        [0, 1, 5, 4],
+        [2, 3, 7, 6],
+        [1, 2, 6, 5],
+        [0, 3, 7, 4],
+    ]
+
+    return [vertices[indices] for indices in face_indices]
+
+
+def animate_attitude_cube(df: pd.DataFrame, output_dir: Path, max_frames: int = 120) -> None:
+    """Create a GIF animation of the body-frame cube attitude."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    frame_count = min(max_frames, len(df))
+    frame_indices = np.linspace(0, len(df) - 1, frame_count, dtype=int)
+    cube_body = _cube_vertices()
+
+    quaternion_columns = [
+        "q_eci_from_body_w",
+        "q_eci_from_body_x",
+        "q_eci_from_body_y",
+        "q_eci_from_body_z",
+    ]
+    quaternions = df[quaternion_columns].to_numpy(dtype=np.float64)
+    times_s = df["t_s"].to_numpy(dtype=np.float64)
+
+    fig = plt.figure(figsize=(6, 6))
+    ax = fig.add_subplot(111, projection="3d")
+
+    def draw_frame(frame_index: int) -> list[Poly3DCollection]:
+        ax.clear()
+
+        rotation_eci_from_body = quaternion_to_rotation_matrix(quaternions[frame_index])
+        cube_eci = cube_body @ rotation_eci_from_body.T
+        faces = _cube_faces(cube_eci)
+
+        collection = Poly3DCollection(
+            faces, facecolors="tab:blue", edgecolors="black", linewidths=0.8, alpha=0.35
+        )
+        ax.add_collection3d(collection)
+
+        axis_length = 1.6
+        body_axes_eci = np.eye(3) @ rotation_eci_from_body.T
+        axis_colors = ["tab:red", "tab:green", "tab:blue"]
+        axis_labels = ["+X body", "+Y body", "+Z body"]
+
+        for axis_vector, color, label in zip(body_axes_eci, axis_colors, axis_labels):
+            ax.plot(
+                [0.0, axis_length * axis_vector[0]],
+                [0.0, axis_length * axis_vector[1]],
+                [0.0, axis_length * axis_vector[2]],
+                color=color,
+                linewidth=2.0,
+                label=label,
+            )
+
+        ax.set_xlim(-1.8, 1.8)
+        ax.set_ylim(-1.8, 1.8)
+        ax.set_zlim(-1.8, 1.8)
+        ax.set_xlabel("ECI X")
+        ax.set_ylabel("ECI Y")
+        ax.set_zlabel("ECI Z")
+        ax.set_title(f"Body attitude, t = {times_s[frame_index]:.1f} s")
+        ax.legend(loc="upper left")
+        ax.view_init(elev=25.0, azim=35.0)
+        ax.set_box_aspect((1.0, 1.0, 1.0))
+
+        return [collection]
+
+    cube_animation = animation.FuncAnimation(
+        fig, draw_frame, frames=frame_indices, interval=80, blit=False
+    )
+    cube_animation.save(output_dir / "attitude_cube.gif", writer=animation.PillowWriter(fps=15))
+    plt.close(fig)
