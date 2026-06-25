@@ -1,0 +1,4 @@
+__pycache__/
+.hatch/
+.mypy_cache/
+venv/

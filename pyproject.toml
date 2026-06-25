@@ -1,0 +1,72 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cubesat-magnetic-attitude-estimation"
+version = "0.1.0"
+description = "CubeSat orbit and geomagnetic-field simulation utilities."
+requires-python = ">=3.11"
+dependencies = [
+    "astropy",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "poliastro",
+    "ppigrf",
+    "pymap3d",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["simulation"]
+
+[tool.hatch.envs.default]
+dependencies = [
+    "black",
+    "flake8",
+    "Flake8-pyproject",
+    "mypy",
+]
+
+[tool.hatch.envs.default.env-vars]
+MPLBACKEND = "Agg"
+MPLCONFIGDIR = "/private/tmp"
+
+[tool.hatch.envs.default.scripts]
+format = "black ."
+format-check = "black --check ."
+lint = [
+    "flake8 .",
+    "mypy .",
+]
+check = [
+    "black --check .",
+    "flake8 .",
+    "mypy .",
+]
+simulate = "python main.py"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+skip-magic-trailing-comma = true
+
+[tool.flake8]
+max-line-length = 100
+extend-ignore = ["E203", "W503"]
+exclude = [
+    ".git",
+    ".hatch",
+    "__pycache__",
+    "outputs",
+    "venv",
+]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+check_untyped_defs = true
+exclude = [
+    "venv/",
+    "outputs/",
+]
