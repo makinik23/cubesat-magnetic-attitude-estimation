@@ -39,6 +39,12 @@ hatch env create
 hatch run simulate
 ```
 
+Serve the CesiumJS visualisation:
+
+```bash
+hatch run visualise
+```
+
 Generated outputs:
 
 - `outputs/orbit_timeseries.csv`

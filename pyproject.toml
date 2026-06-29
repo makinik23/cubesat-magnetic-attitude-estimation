@@ -47,6 +47,7 @@ check = [
     "mypy .",
 ]
 simulate = "python main.py"
+visualise = "python -m http.server 8000 --bind 127.0.0.1 --directory outputs/visualisation"
 
 [tool.black]
 line-length = 100

@@ -8,5 +8,5 @@ orbit:
   epoch_utc: "2026-01-01T12:00:00.000"
 
 simulation:
-  duration_s: 6000.0
+  duration_s: 3000.0
   time_step_s: 10.0

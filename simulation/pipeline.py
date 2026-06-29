@@ -29,6 +29,7 @@ from simulation.plots import (
     plot_r_eci_time,
     plot_velocity_norm,
 )
+from simulation.visualisation import create_cesium_visualisation
 
 
 def save_orbit_results(df: pd.DataFrame, output_dir: Path) -> Path:
@@ -110,6 +111,7 @@ def run_orbit_pipeline(output_dir: Path) -> None:
     df = append_attitude_columns(df, config=attitude_config)
 
     csv_path = save_orbit_results(df, output_dir)
+    czml_path, viewer_path = create_cesium_visualisation(df, output_dir / "visualisation")
 
     plot_position_eci(df, output_dir)
     plot_r_eci_time(df, output_dir)
@@ -135,5 +137,7 @@ def run_orbit_pipeline(output_dir: Path) -> None:
     print(f"Saved plot: {output_dir / 'magnetic_field_body_norm.png'}")
     print(f"Saved plot: {output_dir / 'attitude_orientation.png'}")
     print(f"Saved animation: {output_dir / 'attitude_cube.gif'}")
+    print(f"Saved Cesium CZML: {czml_path}")
+    print(f"Saved Cesium viewer: {viewer_path}")
 
     print_sanity_check(df)

@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CubeSat Cesium Visualisation</title>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.142/Build/Cesium/Cesium.js"></script>
+  <link rel="stylesheet" href="https://cesium.com/downloads/cesiumjs/releases/1.142/Build/Cesium/Widgets/widgets.css">
+  <style>
+    html,
+    body,
+    #cesiumContainer {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #05070b;
+      color: #eef4ff;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .hud {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 2;
+      width: min(360px, calc(100vw - 32px));
+      padding: 14px;
+      border: 1px solid rgba(210, 225, 245, 0.2);
+      border-radius: 8px;
+      background: rgba(7, 11, 18, 0.78);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
+      backdrop-filter: blur(14px);
+    }
+
+    .hudHeader,
+    .readouts,
+    .controls {
+      display: grid;
+      gap: 8px;
+    }
+
+    .hudHeader {
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .status {
+      min-width: 66px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(88, 166, 255, 0.16);
+      color: #a8d8ff;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .status[data-mode="error"] {
+      background: rgba(255, 117, 117, 0.18);
+      color: #ffb3b3;
+    }
+
+    .readouts {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-bottom: 12px;
+    }
+
+    .readout {
+      min-width: 0;
+      padding: 9px 10px;
+      border: 1px solid rgba(210, 225, 245, 0.14);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.055);
+    }
+
+    .readoutWide {
+      grid-column: 1 / -1;
+    }
+
+    .readout b,
+    .readout span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .readout b {
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .readout span {
+      margin-top: 3px;
+      color: rgba(238, 244, 255, 0.68);
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .controls {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    button {
+      min-height: 34px;
+      border: 1px solid rgba(210, 225, 245, 0.18);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #eef4ff;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover,
+    button:focus-visible {
+      background: rgba(73, 190, 255, 0.18);
+      outline: none;
+    }
+
+    button[data-active="true"] {
+      border-color: rgba(255, 214, 102, 0.65);
+      background: rgba(255, 214, 102, 0.18);
+      color: #fff3bf;
+    }
+
+    @media (max-width: 560px) {
+      .hud {
+        top: 10px;
+        left: 10px;
+        width: calc(100vw - 20px);
+        padding: 11px;
+      }
+
+      .readouts {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <section class="hud" aria-label="CubeSat visualisation controls">
+    <div class="hudHeader">
+      <div class="title">CubeSat Orbit</div>
+      <div id="status" class="status">Loading</div>
+    </div>
+    <div class="readouts">
+      <div class="readout readoutWide">
+        <b id="timeValue">--</b>
+        <span>UTC</span>
+      </div>
+      <div class="readout">
+        <b id="speedValue">--</b>
+        <span>Clock</span>
+      </div>
+      <div class="readout">
+        <b id="altitudeValue">--</b>
+        <span>Altitude</span>
+      </div>
+      <div class="readout readoutWide">
+        <b id="locationValue">--</b>
+        <span>Lat / lon</span>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="playButton" type="button">Pause</button>
+      <button id="trackButton" type="button">Track</button>
+      <button id="viewButton" type="button">View</button>
+      <button id="speedButton" type="button">Faster</button>
+    </div>
+  </section>
+
+  <script type="module">
+    const statusElement = document.getElementById("status");
+    const timeElement = document.getElementById("timeValue");
+    const speedElement = document.getElementById("speedValue");
+    const altitudeElement = document.getElementById("altitudeValue");
+    const locationElement = document.getElementById("locationValue");
+    const playButton = document.getElementById("playButton");
+    const trackButton = document.getElementById("trackButton");
+    const viewButton = document.getElementById("viewButton");
+    const speedButton = document.getElementById("speedButton");
+
+    function setStatus(text, mode = "ready") {
+      statusElement.textContent = text;
+      statusElement.dataset.mode = mode;
+    }
+
+    function formatUtc(julianDate) {
+      return Cesium.JulianDate.toDate(julianDate).toISOString().replace(".000Z", "Z");
+    }
+
+    function formatSignedDegrees(value) {
+      return `${value >= 0 ? "+" : ""}${value.toFixed(2)} deg`;
+    }
+
+    try {
+      const imageryProvider = await Cesium.TileMapServiceImageryProvider.fromUrl(
+        Cesium.buildModuleUrl("Assets/Textures/NaturalEarthII")
+      );
+      const viewer = new Cesium.Viewer("cesiumContainer", {
+        animation: true,
+        baseLayer: new Cesium.ImageryLayer(imageryProvider),
+        baseLayerPicker: false,
+        fullscreenButton: false,
+        geocoder: false,
+        homeButton: false,
+        navigationHelpButton: false,
+        sceneModePicker: false,
+        timeline: true,
+        shouldAnimate: true,
+      });
+
+      viewer.scene.globe.enableLighting = true;
+      viewer.scene.globe.showGroundAtmosphere = true;
+      viewer.scene.skyAtmosphere.show = true;
+      viewer.scene.highDynamicRange = true;
+
+      const dataSource = await Cesium.CzmlDataSource.load("orbit.czml");
+      await viewer.dataSources.add(dataSource);
+
+      if (dataSource.clock) {
+        viewer.clock.startTime = dataSource.clock.startTime.clone();
+        viewer.clock.stopTime = dataSource.clock.stopTime.clone();
+        viewer.clock.currentTime = dataSource.clock.currentTime.clone();
+        viewer.clock.clockRange = dataSource.clock.clockRange;
+        viewer.clock.clockStep = dataSource.clock.clockStep;
+        viewer.clock.multiplier = dataSource.clock.multiplier;
+        viewer.timeline.zoomTo(viewer.clock.startTime, viewer.clock.stopTime);
+      }
+
+      const satellite = dataSource.entities.getById("cubesat");
+      const positionScratch = new Cesium.Cartesian3();
+
+      await viewer.flyTo(dataSource, {
+        duration: 1.2,
+        offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-35), 9000000),
+      });
+
+      function updateReadouts(clock) {
+        timeElement.textContent = formatUtc(clock.currentTime);
+        speedElement.textContent = `${Math.round(clock.multiplier)}x`;
+
+        const position = satellite?.position?.getValue(clock.currentTime, positionScratch);
+
+        if (!position) {
+          altitudeElement.textContent = "--";
+          locationElement.textContent = "--";
+          return;
+        }
+
+        const cartographic = Cesium.Cartographic.fromCartesian(position);
+        const latDeg = Cesium.Math.toDegrees(cartographic.latitude);
+        const lonDeg = Cesium.Math.toDegrees(cartographic.longitude);
+        altitudeElement.textContent = `${(cartographic.height / 1000).toFixed(1)} km`;
+        locationElement.textContent = `${formatSignedDegrees(latDeg)}, ${formatSignedDegrees(lonDeg)}`;
+      }
+
+      viewer.clock.onTick.addEventListener(updateReadouts);
+      updateReadouts(viewer.clock);
+
+      playButton.addEventListener("click", () => {
+        viewer.clock.shouldAnimate = !viewer.clock.shouldAnimate;
+        playButton.textContent = viewer.clock.shouldAnimate ? "Pause" : "Play";
+      });
+
+      trackButton.addEventListener("click", () => {
+        const nextTrackedEntity = viewer.trackedEntity ? undefined : satellite;
+        viewer.trackedEntity = nextTrackedEntity;
+        trackButton.dataset.active = nextTrackedEntity ? "true" : "false";
+      });
+
+      viewButton.addEventListener("click", async () => {
+        viewer.trackedEntity = undefined;
+        trackButton.dataset.active = "false";
+        await viewer.flyTo(dataSource, {
+          duration: 0.9,
+          offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-35), 9000000),
+        });
+      });
+
+      speedButton.addEventListener("click", () => {
+        const nextMultiplier = viewer.clock.multiplier >= 1920 ? 60 : viewer.clock.multiplier * 2;
+        viewer.clock.multiplier = nextMultiplier;
+        speedElement.textContent = `${Math.round(nextMultiplier)}x`;
+      });
+
+      setStatus("Ready");
+    } catch (error) {
+      console.error(error);
+      setStatus("Error", "error");
+    }
+  </script>
+</body>
+</html>
