@@ -1,0 +1,15 @@
+satellite:
+  mass_kg: 4.0
+  inertia_kg_m2:
+    - [0.020, 0.0, 0.0]
+    - [0.0, 0.018, 0.0]
+    - [0.0, 0.0, 0.015]
+
+attitude:
+  initial_quaternion_eci_from_body: [1.0, 0.0, 0.0, 0.0]
+  initial_omega_body_degps: [0.1, 0.0, 0.0]
+  torque_body_nm: [0.0, 0.0, 0.0]
+  integration:
+    method: "DOP853"
+    rtol: 0.0000000001
+    atol: 0.000000000001

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from simulation.attitude import append_attitude_columns
+from simulation.attitude import append_attitude_columns, create_default_attitude_config
 from simulation.config import create_default_orbit, create_default_simulation_config
 from simulation.frames import add_frame_columns
 from simulation.geomagnetic import append_igrf_columns
@@ -102,11 +102,12 @@ def run_orbit_pipeline(output_dir: Path) -> None:
 
     elements = create_default_orbit()
     simulation_config = create_default_simulation_config()
+    attitude_config = create_default_attitude_config()
 
     df = propagate_orbit(elements=elements, config=simulation_config)
     df = add_frame_columns(df)
     df = append_igrf_columns(df)
-    df = append_attitude_columns(df)
+    df = append_attitude_columns(df, config=attitude_config)
 
     csv_path = save_orbit_results(df, output_dir)
 

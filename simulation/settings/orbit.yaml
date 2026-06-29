@@ -1,0 +1,12 @@
+orbit:
+  semi_major_axis_m: 6878137.0
+  eccentricity: 0.001
+  inclination_deg: 97.0
+  raan_deg: 0.0
+  argument_of_perigee_deg: 0.0
+  true_anomaly_deg: 0.0
+  epoch_utc: "2026-01-01T12:00:00.000"
+
+simulation:
+  duration_s: 6000.0
+  time_step_s: 10.0

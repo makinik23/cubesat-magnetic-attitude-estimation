@@ -2,3 +2,5 @@ __pycache__/
 .hatch/
 .mypy_cache/
 venv/
+notes.txt
+simulation/docs/

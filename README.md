@@ -21,6 +21,7 @@ attitude motion.
 - `simulation/geomagnetic.py` - IGRF magnetic-field computation.
 - `simulation/attitude.py` - quaternion attitude dynamics.
 - `simulation/plots.py` - plots and GIF animation.
+- `simulation/settings/` - YAML input files for orbit and satellite parameters.
 - `docs/` - concise mathematical notes.
 - `outputs/` - generated CSV, plots, and animation.
 
