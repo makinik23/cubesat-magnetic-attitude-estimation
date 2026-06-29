@@ -1,13 +1,14 @@
 """
 Rigid-body attitude propagation and body-frame magnetic-field projection.
 
-The default initial attitude defines the spacecraft body frame from the first
-orbit sample. The propagated quaternion maps body-frame vectors into ECI.
+The initial attitude is provided as a scalar-first quaternion. The propagated
+quaternion maps body-frame vectors into ECI.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -15,7 +16,10 @@ import numpy.typing as npt
 import pandas as pd
 from scipy.integrate import solve_ivp
 
+from simulation.config import DEFAULT_SETTINGS_DIR, load_yaml_file
+
 ArrayFloat64 = npt.NDArray[np.float64]
+DEFAULT_SATELLITE_CONFIG_PATH = DEFAULT_SETTINGS_DIR / "satellite.yaml"
 
 
 @dataclass(frozen=True)
@@ -25,8 +29,12 @@ class AttitudeConfig:
 
     Parameters
     ----------
+    mass_kg:
+        Spacecraft mass [kg].
     inertia_kg_m2:
         Spacecraft inertia matrix in body coordinates [kg m^2].
+    initial_quaternion_eci_from_body:
+        Initial scalar-first quaternion that maps body coordinates into ECI.
     initial_omega_body_radps:
         Initial angular velocity in body coordinates [rad/s].
     torque_body_nm:
@@ -39,7 +47,9 @@ class AttitudeConfig:
         Absolute integration tolerance.
     """
 
+    mass_kg: float
     inertia_kg_m2: ArrayFloat64
+    initial_quaternion_eci_from_body: ArrayFloat64
     initial_omega_body_radps: ArrayFloat64
     torque_body_nm: ArrayFloat64
     integration_method: str
@@ -47,19 +57,109 @@ class AttitudeConfig:
     atol: float
 
 
-def create_default_attitude_config() -> AttitudeConfig:
+def _get_section(data: dict[str, Any], section_name: str) -> dict[str, Any]:
+    """Return a named YAML section as a mapping."""
+
+    section = data.get(section_name)
+
+    if not isinstance(section, dict):
+        raise ValueError(f"Missing or invalid '{section_name}' section in YAML config.")
+
+    return section
+
+
+def _get_float(section: dict[str, Any], key: str) -> float:
+    """Return a required numeric YAML value as float."""
+
+    value = section.get(key)
+
+    if not isinstance(value, int | float):
+        raise ValueError(f"Missing or invalid numeric value: {key}")
+
+    return float(value)
+
+
+def _get_string(section: dict[str, Any], key: str) -> str:
+    """Return a required string YAML value."""
+
+    value = section.get(key)
+
+    if not isinstance(value, str):
+        raise ValueError(f"Missing or invalid string value: {key}")
+
+    return value
+
+
+def _get_vector(section: dict[str, Any], key: str, length: int = 3) -> ArrayFloat64:
+    """Return a required numeric vector YAML value."""
+
+    value = section.get(key)
+    vector = np.asarray(value, dtype=np.float64)
+
+    if vector.shape != (length,):
+        raise ValueError(f"Missing or invalid vector value: {key}")
+
+    return vector
+
+
+def _get_matrix(section: dict[str, Any], key: str, shape: tuple[int, int] = (3, 3)) -> ArrayFloat64:
+    """Return a required numeric matrix YAML value."""
+
+    value = section.get(key)
+    matrix = np.asarray(value, dtype=np.float64)
+
+    if matrix.shape != shape:
+        raise ValueError(f"Missing or invalid matrix value: {key}")
+
+    return matrix
+
+
+def _validate_attitude_config(config: AttitudeConfig) -> None:
+    """Validate mass and inertia properties used by attitude dynamics."""
+
+    if config.mass_kg <= 0.0:
+        raise ValueError("Satellite mass must be positive.")
+
+    if not np.allclose(config.inertia_kg_m2, config.inertia_kg_m2.T):
+        raise ValueError("Inertia matrix must be symmetric.")
+
+    if np.any(np.linalg.eigvalsh(config.inertia_kg_m2) <= 0.0):
+        raise ValueError("Inertia matrix must be positive definite.")
+
+
+def create_attitude_config_from_yaml(path: Path = DEFAULT_SATELLITE_CONFIG_PATH) -> AttitudeConfig:
     """
-    Create a simple default attitude configuration for the simulation.
+    Create attitude and satellite settings from a YAML configuration file.
     """
 
-    return AttitudeConfig(
-        inertia_kg_m2=np.diag(np.array([0.020, 0.018, 0.015], dtype=np.float64)),
-        initial_omega_body_radps=np.deg2rad(np.array([0.10, -0.05, 0.20], dtype=np.float64)),
-        torque_body_nm=np.zeros(3, dtype=np.float64),
-        integration_method="DOP853",
-        rtol=1e-10,
-        atol=1e-12,
+    data = load_yaml_file(path)
+    satellite = _get_section(data, "satellite")
+    attitude = _get_section(data, "attitude")
+    integration = _get_section(attitude, "integration")
+
+    config = AttitudeConfig(
+        mass_kg=_get_float(satellite, "mass_kg"),
+        inertia_kg_m2=_get_matrix(satellite, "inertia_kg_m2"),
+        initial_quaternion_eci_from_body=_normalize_quaternion(
+            _get_vector(attitude, "initial_quaternion_eci_from_body", length=4)
+        ),
+        initial_omega_body_radps=np.deg2rad(_get_vector(attitude, "initial_omega_body_degps")),
+        torque_body_nm=_get_vector(attitude, "torque_body_nm"),
+        integration_method=_get_string(integration, "method"),
+        rtol=_get_float(integration, "rtol"),
+        atol=_get_float(integration, "atol"),
     )
+    _validate_attitude_config(config)
+
+    return config
+
+
+def create_default_attitude_config() -> AttitudeConfig:
+    """
+    Create the default attitude configuration from the YAML file.
+    """
+
+    return create_attitude_config_from_yaml(DEFAULT_SATELLITE_CONFIG_PATH)
 
 
 def _as_vector_array(values: Any, name: str) -> ArrayFloat64:
@@ -73,17 +173,6 @@ def _as_vector_array(values: Any, name: str) -> ArrayFloat64:
     return array
 
 
-def _normalize_vector(vector: ArrayFloat64, name: str) -> ArrayFloat64:
-    """Normalize a 3D vector."""
-
-    norm = np.linalg.norm(vector)
-
-    if norm <= 0.0:
-        raise ValueError(f"{name} must have non-zero norm.")
-
-    return vector / norm
-
-
 def _normalize_quaternion(quaternion: ArrayFloat64) -> ArrayFloat64:
     """Normalize a scalar-first quaternion."""
 
@@ -93,25 +182,6 @@ def _normalize_quaternion(quaternion: ArrayFloat64) -> ArrayFloat64:
         raise ValueError("Quaternion must have non-zero norm.")
 
     return quaternion / norm
-
-
-def initial_body_rotation_eci_from_orbit(
-    r_eci_m: ArrayFloat64, v_eci_mps: ArrayFloat64
-) -> ArrayFloat64:
-    """
-    Build the initial ECI-from-body rotation matrix from position and velocity.
-
-    The initial body x axis is radial outward, z axis follows orbit angular
-    momentum, and y axis completes the right-handed triad.
-    """
-
-    radial_axis = _normalize_vector(r_eci_m, "r_eci_m")
-    angular_momentum_axis = _normalize_vector(np.cross(r_eci_m, v_eci_mps), "r_eci_m x v_eci_mps")
-    along_track_axis = _normalize_vector(
-        np.cross(angular_momentum_axis, radial_axis), "body y axis"
-    )
-
-    return np.column_stack((radial_axis, along_track_axis, angular_momentum_axis))
 
 
 def quaternion_multiply(left: ArrayFloat64, right: ArrayFloat64) -> ArrayFloat64:
@@ -281,7 +351,7 @@ def attitude_state_derivative(
 
 
 def propagate_attitude(
-    times_s: ArrayFloat64, initial_quaternion_eci_from_body: ArrayFloat64, config: AttitudeConfig
+    times_s: ArrayFloat64, config: AttitudeConfig
 ) -> tuple[ArrayFloat64, ArrayFloat64]:
     """
     Propagate torque-free rigid-body attitude over the simulation time grid.
@@ -300,7 +370,7 @@ def propagate_attitude(
 
     initial_state = np.concatenate(
         (
-            _normalize_quaternion(initial_quaternion_eci_from_body),
+            config.initial_quaternion_eci_from_body,
             np.asarray(config.initial_omega_body_radps, dtype=np.float64),
         )
     )
@@ -342,34 +412,17 @@ def append_attitude_columns(df: pd.DataFrame, config: AttitudeConfig | None = No
     if config is None:
         config = create_default_attitude_config()
 
-    required_columns = {
-        "t_s",
-        "x_eci_m",
-        "y_eci_m",
-        "z_eci_m",
-        "vx_eci_mps",
-        "vy_eci_mps",
-        "vz_eci_mps",
-        "Bx_eci_T",
-        "By_eci_T",
-        "Bz_eci_T",
-    }
+    required_columns = {"t_s", "Bx_eci_T", "By_eci_T", "Bz_eci_T"}
     missing_columns = required_columns.difference(df.columns)
 
     if missing_columns:
         missing = ", ".join(sorted(missing_columns))
         raise ValueError(f"Missing required columns: {missing}")
 
-    r_eci_m = _as_vector_array(df[["x_eci_m", "y_eci_m", "z_eci_m"]].to_numpy(), "r_eci_m")
-    v_eci_mps = _as_vector_array(
-        df[["vx_eci_mps", "vy_eci_mps", "vz_eci_mps"]].to_numpy(), "v_eci_mps"
-    )
     b_eci_t = _as_vector_array(df[["Bx_eci_T", "By_eci_T", "Bz_eci_T"]].to_numpy(), "b_eci_t")
     times_s = np.asarray(df["t_s"].to_numpy(), dtype=np.float64)
 
-    initial_rotation_eci_from_body = initial_body_rotation_eci_from_orbit(r_eci_m[0], v_eci_mps[0])
-    initial_quaternion_eci_from_body = rotation_matrix_to_quaternion(initial_rotation_eci_from_body)
-    quaternions, omegas = propagate_attitude(times_s, initial_quaternion_eci_from_body, config)
+    quaternions, omegas = propagate_attitude(times_s, config)
 
     rotation_matrices = np.asarray(
         [quaternion_to_rotation_matrix(quaternion) for quaternion in quaternions], dtype=np.float64
