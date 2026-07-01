@@ -12,7 +12,7 @@ from astropy.time import Time
 ArrayFloat64 = npt.NDArray[np.float64]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ClassicalOrbitalElements:
     """
     Classical Keplerian orbital elements.
@@ -29,7 +29,7 @@ class ClassicalOrbitalElements:
     epoch: Time
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SimulationConfig:
     """Time configuration of the simulation."""
 
@@ -37,7 +37,7 @@ class SimulationConfig:
     time_step_s: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AttitudeConfig:
     """
     Rigid-body attitude propagation settings.
@@ -55,17 +55,17 @@ class AttitudeConfig:
     atol: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OrbitState:
     """Orbit propagation results in ECI coordinates."""
 
     t_s: ArrayFloat64
-    t_utc: npt.NDArray[np.str_]
+    t_utc: Time
     r_eci_m: ArrayFloat64
     v_eci_mps: ArrayFloat64
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FrameState:
     """Position and geodetic data derived from the orbit state."""
 
@@ -75,7 +75,7 @@ class FrameState:
     alt_m: ArrayFloat64
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class MagneticFieldState:
     """Geomagnetic field vectors in the frames used by the simulation."""
 
@@ -84,7 +84,7 @@ class MagneticFieldState:
     b_eci_t: ArrayFloat64
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AttitudeState:
     """Rigid-body attitude propagation results."""
 
@@ -94,3 +94,14 @@ class AttitudeState:
     euler_zyx_rad: ArrayFloat64
     rt_r_minus_i: ArrayFloat64
     det_rotation: ArrayFloat64
+
+
+@dataclass(frozen=True, slots=True)
+class SimulationResult:
+    """Complete simulation result before tabular export or plotting."""
+
+    orbit: OrbitState
+    frame: FrameState
+    magnetic_field: MagneticFieldState
+    attitude: AttitudeState
+    b_body_t: ArrayFloat64

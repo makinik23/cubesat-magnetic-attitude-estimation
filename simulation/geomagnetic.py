@@ -8,16 +8,29 @@ external reference component.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
-import pandas as pd
 import ppigrf
+from astropy.time import Time
 
 from simulation.frames import ecef_vectors_to_eci, ned_to_ecef_vectors
 from simulation.types import FrameState, MagneticFieldState, OrbitState
 
 
+def _as_time_array(time_utc: Any) -> Time:
+    """Convert UTC timestamps to an astropy Time array."""
+
+    if isinstance(time_utc, Time):
+        if time_utc.isscalar:
+            return Time([time_utc])
+        return time_utc
+
+    return Time([str(value) for value in np.atleast_1d(time_utc)], format="isot", scale="utc")
+
+
 def compute_igrf_ned_nt(
-    lat_deg: np.ndarray, lon_deg: np.ndarray, alt_m: np.ndarray, time_utc: np.ndarray
+    lat_deg: np.ndarray, lon_deg: np.ndarray, alt_m: np.ndarray, time_utc: Any
 ) -> np.ndarray:
     """
     Compute IGRF magnetic field in local NED coordinates.
@@ -28,10 +41,24 @@ def compute_igrf_ned_nt(
         Magnetic-field vectors [nT] in NED coordinates, shape (N, 3).
     """
 
+    lat_deg = np.asarray(lat_deg, dtype=np.float64)
+    lon_deg = np.asarray(lon_deg, dtype=np.float64)
+    alt_m = np.asarray(alt_m, dtype=np.float64)
+    times = _as_time_array(time_utc)
+
+    if lat_deg.ndim != 1 or lon_deg.ndim != 1 or alt_m.ndim != 1:
+        raise ValueError("lat_deg, lon_deg and alt_m must be one-dimensional arrays.")
+
+    if lat_deg.shape != lon_deg.shape or lat_deg.shape != alt_m.shape:
+        raise ValueError("lat_deg, lon_deg and alt_m must have the same length.")
+
+    if len(times) != len(lat_deg):
+        raise ValueError("time_utc must have the same length as lat_deg, lon_deg and alt_m.")
+
     b_ned_nt = np.empty((len(lat_deg), 3), dtype=float)
 
-    for idx, (lat, lon, alt, time_iso) in enumerate(zip(lat_deg, lon_deg, alt_m, time_utc)):
-        date = pd.Timestamp(str(time_iso)).to_pydatetime()
+    for idx, (lat, lon, alt, time) in enumerate(zip(lat_deg, lon_deg, alt_m, times)):
+        date = time.to_datetime()
         alt_km = alt / 1000.0
 
         # ppigrf.igrf returns east, north and up components in nT.
@@ -59,31 +86,10 @@ def compute_magnetic_field_state(orbit: OrbitState, frame: FrameState) -> Magnet
     return MagneticFieldState(b_ned_nt=b_ned_nt, b_ecef_t=b_ecef_t, b_eci_t=b_eci_t)
 
 
-def append_igrf_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Append IGRF magnetic-field columns in NED, ECEF and ECI frames."""
+class IgrfMagneticFieldModel:
+    """Adapter exposing the current ppigrf IGRF model."""
 
-    lat_deg = df["lat_deg"].to_numpy()
-    lon_deg = df["lon_deg"].to_numpy()
-    alt_m = df["alt_m"].to_numpy()
-    time_utc = df["t_utc"].to_numpy()
-    r_ecef_m = df[["x_ecef_m", "y_ecef_m", "z_ecef_m"]].to_numpy()
+    def compute(self, orbit: OrbitState, frame: FrameState) -> MagneticFieldState:
+        """Compute magnetic-field vectors along an orbit."""
 
-    b_ned_nt = compute_igrf_ned_nt(lat_deg, lon_deg, alt_m, time_utc)
-    b_ned_t = b_ned_nt * 1e-9
-    b_ecef_t = ned_to_ecef_vectors(b_ned_t, lat_deg, lon_deg)
-    b_eci_t = ecef_vectors_to_eci(b_ecef_t, r_ecef_m, time_utc)
-
-    df = df.copy()
-    df["B_N_nT"] = b_ned_nt[:, 0]
-    df["B_E_nT"] = b_ned_nt[:, 1]
-    df["B_D_nT"] = b_ned_nt[:, 2]
-    df["Bx_ecef_T"] = b_ecef_t[:, 0]
-    df["By_ecef_T"] = b_ecef_t[:, 1]
-    df["Bz_ecef_T"] = b_ecef_t[:, 2]
-    df["Bx_eci_T"] = b_eci_t[:, 0]
-    df["By_eci_T"] = b_eci_t[:, 1]
-    df["Bz_eci_T"] = b_eci_t[:, 2]
-    df["B_norm_T"] = np.linalg.norm(b_eci_t, axis=1)
-    df["B_norm_nT"] = df["B_norm_T"] * 1e9
-
-    return df
+        return compute_magnetic_field_state(orbit, frame)

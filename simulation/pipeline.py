@@ -4,15 +4,11 @@ Main simulation pipeline orchestration.
 
 from pathlib import Path
 
-from simulation.attitude import project_eci_vectors_to_body, propagate_attitude
 from simulation.config import (
     create_default_attitude_config,
     create_default_orbit,
     create_default_simulation_config,
 )
-from simulation.frames import compute_frame_state
-from simulation.geomagnetic import compute_magnetic_field_state
-from simulation.orbit_provider import propagate_orbit
 from simulation.plots import (
     animate_attitude_cube,
     plot_attitude_orientation,
@@ -27,23 +23,19 @@ from simulation.plots import (
     plot_velocity_norm,
 )
 from simulation.results import build_results_dataframe, print_sanity_check, save_results
+from simulation.runner import SimulationRunner
 
 
 def run_orbit_pipeline(output_dir: Path) -> None:
-    """
-    Run the orbit propagation pipeline.
-    """
+    """Run the orbit propagation pipeline."""
 
     elements = create_default_orbit()
     simulation_config = create_default_simulation_config()
     attitude_config = create_default_attitude_config()
 
-    orbit = propagate_orbit(elements=elements, config=simulation_config)
-    frame = compute_frame_state(orbit)
-    magnetic_field = compute_magnetic_field_state(orbit, frame)
-    attitude = propagate_attitude(orbit.t_s, attitude_config)
-    b_body_t = project_eci_vectors_to_body(magnetic_field.b_eci_t, attitude)
-    df = build_results_dataframe(orbit, frame, magnetic_field, attitude, b_body_t)
+    runner = SimulationRunner()
+    result = runner.run(elements, simulation_config, attitude_config)
+    df = build_results_dataframe(result)
 
     csv_path = save_results(df, output_dir)
 

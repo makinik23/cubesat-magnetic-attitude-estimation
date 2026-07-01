@@ -284,3 +284,21 @@ def project_eci_vectors_to_body(vectors_eci: ArrayFloat64, attitude: AttitudeSta
     rotation_body_from_eci = np.transpose(attitude.rotation_eci_from_body, axes=(0, 2, 1))
 
     return np.einsum("nij,nj->ni", rotation_body_from_eci, vectors_eci)
+
+
+class SolveIvpAttitudePropagator:
+    """Adapter exposing the current solve_ivp attitude propagator."""
+
+    def propagate(self, times_s: ArrayFloat64, config: AttitudeConfig) -> AttitudeState:
+        """Propagate attitude over a time grid."""
+
+        return propagate_attitude(times_s, config)
+
+
+class RotationBodyFieldProjector:
+    """Adapter exposing the current ECI-to-body vector projection."""
+
+    def project(self, vectors_eci: ArrayFloat64, attitude: AttitudeState) -> ArrayFloat64:
+        """Project inertial vectors into body coordinates."""
+
+        return project_eci_vectors_to_body(vectors_eci, attitude)

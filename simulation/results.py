@@ -7,22 +7,83 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from simulation.types import AttitudeState, FrameState, MagneticFieldState, OrbitState
+from simulation.types import SimulationResult
+
+RESULT_COLUMNS = [
+    "t_s",
+    "t_utc",
+    "x_eci_m",
+    "y_eci_m",
+    "z_eci_m",
+    "vx_eci_mps",
+    "vy_eci_mps",
+    "vz_eci_mps",
+    "r_norm_m",
+    "v_norm_mps",
+    "x_ecef_m",
+    "y_ecef_m",
+    "z_ecef_m",
+    "lat_deg",
+    "lon_deg",
+    "alt_m",
+    "lat_rad",
+    "lon_rad",
+    "alt_km",
+    "B_N_nT",
+    "B_E_nT",
+    "B_D_nT",
+    "Bx_ecef_T",
+    "By_ecef_T",
+    "Bz_ecef_T",
+    "Bx_eci_T",
+    "By_eci_T",
+    "Bz_eci_T",
+    "B_norm_T",
+    "B_norm_nT",
+    "q_eci_from_body_w",
+    "q_eci_from_body_x",
+    "q_eci_from_body_y",
+    "q_eci_from_body_z",
+    "omega_body_x_radps",
+    "omega_body_y_radps",
+    "omega_body_z_radps",
+    "yaw_eci_from_body_rad",
+    "pitch_eci_from_body_rad",
+    "roll_eci_from_body_rad",
+    "yaw_eci_from_body_deg",
+    "pitch_eci_from_body_deg",
+    "roll_eci_from_body_deg",
+    "Bx_body_T",
+    "By_body_T",
+    "Bz_body_T",
+    "B_body_norm_T",
+    "det_R_eci_from_body",
+    "RT_R_minus_I_fro",
+    "RT_R_minus_I_11",
+    "RT_R_minus_I_12",
+    "RT_R_minus_I_13",
+    "RT_R_minus_I_21",
+    "RT_R_minus_I_22",
+    "RT_R_minus_I_23",
+    "RT_R_minus_I_31",
+    "RT_R_minus_I_32",
+    "RT_R_minus_I_33",
+]
 
 
-def build_results_dataframe(
-    orbit: OrbitState,
-    frame: FrameState,
-    magnetic_field: MagneticFieldState,
-    attitude: AttitudeState,
-    b_body_t: np.ndarray,
-) -> pd.DataFrame:
+def build_results_dataframe(result: SimulationResult) -> pd.DataFrame:
     """Combine simulation states into a tabular result for export and plotting."""
+
+    orbit = result.orbit
+    frame = result.frame
+    magnetic_field = result.magnetic_field
+    attitude = result.attitude
+    b_body_t = result.b_body_t
 
     df = pd.DataFrame(
         {
             "t_s": orbit.t_s,
-            "t_utc": orbit.t_utc,
+            "t_utc": orbit.t_utc.isot,
             "x_eci_m": orbit.r_eci_m[:, 0],
             "y_eci_m": orbit.r_eci_m[:, 1],
             "z_eci_m": orbit.r_eci_m[:, 2],
@@ -78,68 +139,7 @@ def build_results_dataframe(
         for col in range(3):
             df[f"RT_R_minus_I_{row + 1}{col + 1}"] = attitude.rt_r_minus_i[:, row, col]
 
-    ordered_columns = [
-        "t_s",
-        "t_utc",
-        "x_eci_m",
-        "y_eci_m",
-        "z_eci_m",
-        "vx_eci_mps",
-        "vy_eci_mps",
-        "vz_eci_mps",
-        "r_norm_m",
-        "v_norm_mps",
-        "x_ecef_m",
-        "y_ecef_m",
-        "z_ecef_m",
-        "lat_deg",
-        "lon_deg",
-        "alt_m",
-        "lat_rad",
-        "lon_rad",
-        "alt_km",
-        "B_N_nT",
-        "B_E_nT",
-        "B_D_nT",
-        "Bx_ecef_T",
-        "By_ecef_T",
-        "Bz_ecef_T",
-        "Bx_eci_T",
-        "By_eci_T",
-        "Bz_eci_T",
-        "B_norm_T",
-        "B_norm_nT",
-        "q_eci_from_body_w",
-        "q_eci_from_body_x",
-        "q_eci_from_body_y",
-        "q_eci_from_body_z",
-        "omega_body_x_radps",
-        "omega_body_y_radps",
-        "omega_body_z_radps",
-        "yaw_eci_from_body_rad",
-        "pitch_eci_from_body_rad",
-        "roll_eci_from_body_rad",
-        "yaw_eci_from_body_deg",
-        "pitch_eci_from_body_deg",
-        "roll_eci_from_body_deg",
-        "Bx_body_T",
-        "By_body_T",
-        "Bz_body_T",
-        "B_body_norm_T",
-        "det_R_eci_from_body",
-        "RT_R_minus_I_fro",
-        "RT_R_minus_I_11",
-        "RT_R_minus_I_12",
-        "RT_R_minus_I_13",
-        "RT_R_minus_I_21",
-        "RT_R_minus_I_22",
-        "RT_R_minus_I_23",
-        "RT_R_minus_I_31",
-        "RT_R_minus_I_32",
-        "RT_R_minus_I_33",
-    ]
-
-    return df[ordered_columns]
+    return df[RESULT_COLUMNS]
 
 
 def save_results(df: pd.DataFrame, output_dir: Path) -> Path:

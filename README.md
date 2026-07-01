@@ -17,10 +17,12 @@ attitude motion.
 - `main.py` - entry point.
 - `simulation/config.py` - configuration loading and validation.
 - `simulation/types.py` - shared configuration and state dataclasses.
-- `simulation/orbit_provider.py` - orbit propagation.
-- `simulation/frames.py` - ECI/ECEF/geodetic transformations.
-- `simulation/geomagnetic.py` - IGRF magnetic-field computation.
-- `simulation/attitude.py` - quaternion attitude dynamics.
+- `simulation/interfaces.py` - strategy contracts for replaceable components.
+- `simulation/runner.py` - end-to-end simulation orchestration.
+- `simulation/orbit_provider.py` - poliastro orbit propagation adapter.
+- `simulation/frames.py` - Astropy/pymap3d frame transformations.
+- `simulation/geomagnetic.py` - ppigrf IGRF magnetic-field adapter.
+- `simulation/attitude.py` - solve_ivp quaternion attitude dynamics.
 - `simulation/results.py` - result table assembly, CSV export, and sanity checks.
 - `simulation/plots.py` - plots and GIF animation.
 - `simulation/settings/` - YAML input files for orbit and satellite parameters.

@@ -90,7 +90,6 @@ def propagate_orbit(elements: ClassicalOrbitalElements, config: SimulationConfig
 
     r_eci_list = []
     v_eci_list = []
-    time_utc_list = []
 
     for t_s in times_s:
         propagated_orbit = orbit.propagate(t_s * u.s)
@@ -98,18 +97,25 @@ def propagate_orbit(elements: ClassicalOrbitalElements, config: SimulationConfig
         r_eci_m = propagated_orbit.r.to(u.m).value
         v_eci_mps = propagated_orbit.v.to(u.m / u.s).value
 
-        current_time = elements.epoch + t_s * u.s
-
         r_eci_list.append(r_eci_m)
         v_eci_list.append(v_eci_mps)
-        time_utc_list.append(current_time.isot)
 
     r_eci = np.asarray(r_eci_list)
     v_eci = np.asarray(v_eci_list)
+    times_utc = elements.epoch + times_s * u.s
 
     return OrbitState(
         t_s=np.asarray(times_s, dtype=np.float64),
-        t_utc=np.asarray(time_utc_list, dtype=str),
+        t_utc=times_utc,
         r_eci_m=np.asarray(r_eci, dtype=np.float64),
         v_eci_mps=np.asarray(v_eci, dtype=np.float64),
     )
+
+
+class PoliastroKeplerPropagator:
+    """Adapter exposing the current poliastro two-body propagator."""
+
+    def propagate(self, elements: ClassicalOrbitalElements, config: SimulationConfig) -> OrbitState:
+        """Propagate an orbit with poliastro."""
+
+        return propagate_orbit(elements, config)
