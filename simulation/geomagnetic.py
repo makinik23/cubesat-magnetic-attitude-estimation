@@ -13,6 +13,7 @@ import pandas as pd
 import ppigrf
 
 from simulation.frames import ecef_vectors_to_eci, ned_to_ecef_vectors
+from simulation.types import FrameState, MagneticFieldState, OrbitState
 
 
 def compute_igrf_ned_nt(
@@ -30,7 +31,7 @@ def compute_igrf_ned_nt(
     b_ned_nt = np.empty((len(lat_deg), 3), dtype=float)
 
     for idx, (lat, lon, alt, time_iso) in enumerate(zip(lat_deg, lon_deg, alt_m, time_utc)):
-        date = pd.Timestamp(time_iso).to_pydatetime()
+        date = pd.Timestamp(str(time_iso)).to_pydatetime()
         alt_km = alt / 1000.0
 
         # ppigrf.igrf returns east, north and up components in nT.
@@ -45,6 +46,17 @@ def compute_igrf_ned_nt(
         )
 
     return b_ned_nt
+
+
+def compute_magnetic_field_state(orbit: OrbitState, frame: FrameState) -> MagneticFieldState:
+    """Compute geomagnetic-field vectors in NED, ECEF and ECI frames."""
+
+    b_ned_nt = compute_igrf_ned_nt(frame.lat_deg, frame.lon_deg, frame.alt_m, orbit.t_utc)
+    b_ned_t = b_ned_nt * 1e-9
+    b_ecef_t = ned_to_ecef_vectors(b_ned_t, frame.lat_deg, frame.lon_deg)
+    b_eci_t = ecef_vectors_to_eci(b_ecef_t, frame.r_ecef_m, orbit.t_utc)
+
+    return MagneticFieldState(b_ned_nt=b_ned_nt, b_ecef_t=b_ecef_t, b_eci_t=b_eci_t)
 
 
 def append_igrf_columns(df: pd.DataFrame) -> pd.DataFrame:

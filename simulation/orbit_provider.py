@@ -9,13 +9,12 @@ used internally by poliastro for the two-body problem.
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
 import astropy.units as u
 
 from poliastro.bodies import Earth
 from poliastro.twobody import Orbit
 
-from simulation.config import ClassicalOrbitalElements, SimulationConfig
+from simulation.types import ClassicalOrbitalElements, OrbitState, SimulationConfig
 
 
 def create_poliastro_orbit(elements: ClassicalOrbitalElements) -> Orbit:
@@ -69,7 +68,7 @@ def generate_time_grid(config: SimulationConfig) -> np.ndarray:
     return np.arange(0.0, config.duration_s + config.time_step_s, config.time_step_s)
 
 
-def propagate_orbit(elements: ClassicalOrbitalElements, config: SimulationConfig) -> pd.DataFrame:
+def propagate_orbit(elements: ClassicalOrbitalElements, config: SimulationConfig) -> OrbitState:
     """
     Propagate orbit and return ECI position and velocity time series.
 
@@ -82,8 +81,8 @@ def propagate_orbit(elements: ClassicalOrbitalElements, config: SimulationConfig
 
     Returns
     -------
-    pd.DataFrame
-        DataFrame with time, ECI position and ECI velocity.
+    OrbitState
+        Time, ECI position and ECI velocity arrays.
     """
 
     orbit = create_poliastro_orbit(elements)
@@ -108,20 +107,9 @@ def propagate_orbit(elements: ClassicalOrbitalElements, config: SimulationConfig
     r_eci = np.asarray(r_eci_list)
     v_eci = np.asarray(v_eci_list)
 
-    df = pd.DataFrame(
-        {
-            "t_s": times_s,
-            "t_utc": time_utc_list,
-            "x_eci_m": r_eci[:, 0],
-            "y_eci_m": r_eci[:, 1],
-            "z_eci_m": r_eci[:, 2],
-            "vx_eci_mps": v_eci[:, 0],
-            "vy_eci_mps": v_eci[:, 1],
-            "vz_eci_mps": v_eci[:, 2],
-        }
+    return OrbitState(
+        t_s=np.asarray(times_s, dtype=np.float64),
+        t_utc=np.asarray(time_utc_list, dtype=str),
+        r_eci_m=np.asarray(r_eci, dtype=np.float64),
+        v_eci_mps=np.asarray(v_eci, dtype=np.float64),
     )
-
-    df["r_norm_m"] = np.linalg.norm(r_eci, axis=1)
-    df["v_norm_mps"] = np.linalg.norm(v_eci, axis=1)
-
-    return df

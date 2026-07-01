@@ -7,159 +7,12 @@ quaternion maps body-frame vectors into ECI.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 import numpy as np
-import numpy.typing as npt
-import pandas as pd
 from scipy.integrate import solve_ivp
 
-from simulation.config import DEFAULT_SETTINGS_DIR, load_yaml_file
-
-ArrayFloat64 = npt.NDArray[np.float64]
-DEFAULT_SATELLITE_CONFIG_PATH = DEFAULT_SETTINGS_DIR / "satellite.yaml"
-
-
-@dataclass(frozen=True)
-class AttitudeConfig:
-    """
-    Rigid-body attitude propagation settings.
-
-    Parameters
-    ----------
-    mass_kg:
-        Spacecraft mass [kg].
-    inertia_kg_m2:
-        Spacecraft inertia matrix in body coordinates [kg m^2].
-    initial_quaternion_eci_from_body:
-        Initial scalar-first quaternion that maps body coordinates into ECI.
-    initial_omega_body_radps:
-        Initial angular velocity in body coordinates [rad/s].
-    torque_body_nm:
-        Constant external torque in body coordinates [N m].
-    integration_method:
-        solve_ivp integration method.
-    rtol:
-        Relative integration tolerance.
-    atol:
-        Absolute integration tolerance.
-    """
-
-    mass_kg: float
-    inertia_kg_m2: ArrayFloat64
-    initial_quaternion_eci_from_body: ArrayFloat64
-    initial_omega_body_radps: ArrayFloat64
-    torque_body_nm: ArrayFloat64
-    integration_method: str
-    rtol: float
-    atol: float
-
-
-def _get_section(data: dict[str, Any], section_name: str) -> dict[str, Any]:
-    """Return a named YAML section as a mapping."""
-
-    section = data.get(section_name)
-
-    if not isinstance(section, dict):
-        raise ValueError(f"Missing or invalid '{section_name}' section in YAML config.")
-
-    return section
-
-
-def _get_float(section: dict[str, Any], key: str) -> float:
-    """Return a required numeric YAML value as float."""
-
-    value = section.get(key)
-
-    if not isinstance(value, int | float):
-        raise ValueError(f"Missing or invalid numeric value: {key}")
-
-    return float(value)
-
-
-def _get_string(section: dict[str, Any], key: str) -> str:
-    """Return a required string YAML value."""
-
-    value = section.get(key)
-
-    if not isinstance(value, str):
-        raise ValueError(f"Missing or invalid string value: {key}")
-
-    return value
-
-
-def _get_vector(section: dict[str, Any], key: str, length: int = 3) -> ArrayFloat64:
-    """Return a required numeric vector YAML value."""
-
-    value = section.get(key)
-    vector = np.asarray(value, dtype=np.float64)
-
-    if vector.shape != (length,):
-        raise ValueError(f"Missing or invalid vector value: {key}")
-
-    return vector
-
-
-def _get_matrix(section: dict[str, Any], key: str, shape: tuple[int, int] = (3, 3)) -> ArrayFloat64:
-    """Return a required numeric matrix YAML value."""
-
-    value = section.get(key)
-    matrix = np.asarray(value, dtype=np.float64)
-
-    if matrix.shape != shape:
-        raise ValueError(f"Missing or invalid matrix value: {key}")
-
-    return matrix
-
-
-def _validate_attitude_config(config: AttitudeConfig) -> None:
-    """Validate mass and inertia properties used by attitude dynamics."""
-
-    if config.mass_kg <= 0.0:
-        raise ValueError("Satellite mass must be positive.")
-
-    if not np.allclose(config.inertia_kg_m2, config.inertia_kg_m2.T):
-        raise ValueError("Inertia matrix must be symmetric.")
-
-    if np.any(np.linalg.eigvalsh(config.inertia_kg_m2) <= 0.0):
-        raise ValueError("Inertia matrix must be positive definite.")
-
-
-def create_attitude_config_from_yaml(path: Path = DEFAULT_SATELLITE_CONFIG_PATH) -> AttitudeConfig:
-    """
-    Create attitude and satellite settings from a YAML configuration file.
-    """
-
-    data = load_yaml_file(path)
-    satellite = _get_section(data, "satellite")
-    attitude = _get_section(data, "attitude")
-    integration = _get_section(attitude, "integration")
-
-    config = AttitudeConfig(
-        mass_kg=_get_float(satellite, "mass_kg"),
-        inertia_kg_m2=_get_matrix(satellite, "inertia_kg_m2"),
-        initial_quaternion_eci_from_body=_normalize_quaternion(
-            _get_vector(attitude, "initial_quaternion_eci_from_body", length=4)
-        ),
-        initial_omega_body_radps=np.deg2rad(_get_vector(attitude, "initial_omega_body_degps")),
-        torque_body_nm=_get_vector(attitude, "torque_body_nm"),
-        integration_method=_get_string(integration, "method"),
-        rtol=_get_float(integration, "rtol"),
-        atol=_get_float(integration, "atol"),
-    )
-    _validate_attitude_config(config)
-
-    return config
-
-
-def create_default_attitude_config() -> AttitudeConfig:
-    """
-    Create the default attitude configuration from the YAML file.
-    """
-
-    return create_attitude_config_from_yaml(DEFAULT_SATELLITE_CONFIG_PATH)
+from simulation.types import ArrayFloat64, AttitudeConfig, AttitudeState
 
 
 def _as_vector_array(values: Any, name: str) -> ArrayFloat64:
@@ -350,9 +203,7 @@ def attitude_state_derivative(
     return np.concatenate((quaternion_dot, omega_dot))
 
 
-def propagate_attitude(
-    times_s: ArrayFloat64, config: AttitudeConfig
-) -> tuple[ArrayFloat64, ArrayFloat64]:
+def propagate_attitude(times_s: ArrayFloat64, config: AttitudeConfig) -> AttitudeState:
     """
     Propagate torque-free rigid-body attitude over the simulation time grid.
     """
@@ -376,22 +227,23 @@ def propagate_attitude(
     )
 
     if len(times_s) == 1:
-        return initial_state[:4].reshape(1, 4), initial_state[4:].reshape(1, 3)
+        states = initial_state.reshape(1, -1)
+    else:
+        solution = solve_ivp(
+            fun=lambda time_s, state: attitude_state_derivative(time_s, state, config),
+            t_span=(float(times_s[0]), float(times_s[-1])),
+            y0=initial_state,
+            t_eval=times_s,
+            method=config.integration_method,
+            rtol=config.rtol,
+            atol=config.atol,
+        )
 
-    solution = solve_ivp(
-        fun=lambda time_s, state: attitude_state_derivative(time_s, state, config),
-        t_span=(float(times_s[0]), float(times_s[-1])),
-        y0=initial_state,
-        t_eval=times_s,
-        method=config.integration_method,
-        rtol=config.rtol,
-        atol=config.atol,
-    )
+        if not solution.success:
+            raise RuntimeError(f"Attitude integration failed: {solution.message}")
 
-    if not solution.success:
-        raise RuntimeError(f"Attitude integration failed: {solution.message}")
+        states = np.asarray(solution.y.T, dtype=np.float64)
 
-    states = np.asarray(solution.y.T, dtype=np.float64)
     quaternions = states[:, :4]
     quaternion_norms = np.linalg.norm(quaternions, axis=1)
 
@@ -401,29 +253,6 @@ def propagate_attitude(
     quaternions = quaternions / quaternion_norms[:, np.newaxis]
     omegas = states[:, 4:]
 
-    return quaternions, omegas
-
-
-def append_attitude_columns(df: pd.DataFrame, config: AttitudeConfig | None = None) -> pd.DataFrame:
-    """
-    Append attitude, body-frame magnetic-field and rotation sanity-check columns.
-    """
-
-    if config is None:
-        config = create_default_attitude_config()
-
-    required_columns = {"t_s", "Bx_eci_T", "By_eci_T", "Bz_eci_T"}
-    missing_columns = required_columns.difference(df.columns)
-
-    if missing_columns:
-        missing = ", ".join(sorted(missing_columns))
-        raise ValueError(f"Missing required columns: {missing}")
-
-    b_eci_t = _as_vector_array(df[["Bx_eci_T", "By_eci_T", "Bz_eci_T"]].to_numpy(), "b_eci_t")
-    times_s = np.asarray(df["t_s"].to_numpy(), dtype=np.float64)
-
-    quaternions, omegas = propagate_attitude(times_s, config)
-
     rotation_matrices = np.asarray(
         [quaternion_to_rotation_matrix(quaternion) for quaternion in quaternions], dtype=np.float64
     )
@@ -431,35 +260,27 @@ def append_attitude_columns(df: pd.DataFrame, config: AttitudeConfig | None = No
         [rotation_matrix_to_zyx_euler(rotation_matrix) for rotation_matrix in rotation_matrices],
         dtype=np.float64,
     )
-    rotation_body_from_eci = np.transpose(rotation_matrices, axes=(0, 2, 1))
-
-    b_body_t = np.einsum("nij,nj->ni", rotation_body_from_eci, b_eci_t)
     rt_r_minus_i = np.einsum("nji,njk->nik", rotation_matrices, rotation_matrices) - np.eye(3)
     det_rotation = np.linalg.det(rotation_matrices)
 
-    result = df.copy()
-    result["q_eci_from_body_w"] = quaternions[:, 0]
-    result["q_eci_from_body_x"] = quaternions[:, 1]
-    result["q_eci_from_body_y"] = quaternions[:, 2]
-    result["q_eci_from_body_z"] = quaternions[:, 3]
-    result["omega_body_x_radps"] = omegas[:, 0]
-    result["omega_body_y_radps"] = omegas[:, 1]
-    result["omega_body_z_radps"] = omegas[:, 2]
-    result["yaw_eci_from_body_rad"] = euler_zyx_rad[:, 0]
-    result["pitch_eci_from_body_rad"] = euler_zyx_rad[:, 1]
-    result["roll_eci_from_body_rad"] = euler_zyx_rad[:, 2]
-    result["yaw_eci_from_body_deg"] = np.rad2deg(euler_zyx_rad[:, 0])
-    result["pitch_eci_from_body_deg"] = np.rad2deg(euler_zyx_rad[:, 1])
-    result["roll_eci_from_body_deg"] = np.rad2deg(euler_zyx_rad[:, 2])
-    result["Bx_body_T"] = b_body_t[:, 0]
-    result["By_body_T"] = b_body_t[:, 1]
-    result["Bz_body_T"] = b_body_t[:, 2]
-    result["B_body_norm_T"] = np.linalg.norm(b_body_t, axis=1)
-    result["det_R_eci_from_body"] = det_rotation
-    result["RT_R_minus_I_fro"] = np.linalg.norm(rt_r_minus_i, axis=(1, 2))
+    return AttitudeState(
+        q_eci_from_body=quaternions,
+        omega_body_radps=omegas,
+        rotation_eci_from_body=rotation_matrices,
+        euler_zyx_rad=euler_zyx_rad,
+        rt_r_minus_i=rt_r_minus_i,
+        det_rotation=det_rotation,
+    )
 
-    for row in range(3):
-        for col in range(3):
-            result[f"RT_R_minus_I_{row + 1}{col + 1}"] = rt_r_minus_i[:, row, col]
 
-    return result
+def project_eci_vectors_to_body(vectors_eci: ArrayFloat64, attitude: AttitudeState) -> ArrayFloat64:
+    """Project ECI-frame vectors into the spacecraft body frame."""
+
+    vectors_eci = _as_vector_array(vectors_eci, "vectors_eci")
+
+    if vectors_eci.shape[0] != attitude.rotation_eci_from_body.shape[0]:
+        raise ValueError("vectors_eci and attitude state must have the same length.")
+
+    rotation_body_from_eci = np.transpose(attitude.rotation_eci_from_body, axes=(0, 2, 1))
+
+    return np.einsum("nij,nj->ni", rotation_body_from_eci, vectors_eci)

@@ -19,6 +19,8 @@ from astropy.coordinates import GCRS, ITRS, CartesianRepresentation
 from astropy.time import Time
 from astropy.utils import iers
 
+from simulation.types import FrameState, OrbitState
+
 
 def _configure_iers_offline() -> None:
     """Keep Astropy frame transforms deterministic without network access."""
@@ -122,6 +124,15 @@ def ecef_to_geodetic(r_ecef_m: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.n
         np.asarray(lon_deg, dtype=np.float64),
         np.asarray(alt_m, dtype=np.float64),
     )
+
+
+def compute_frame_state(orbit: OrbitState) -> FrameState:
+    """Compute ECEF positions and geodetic coordinates from an orbit state."""
+
+    r_ecef_m = eci_to_ecef_positions(orbit.r_eci_m, orbit.t_utc)
+    lat_deg, lon_deg, alt_m = ecef_to_geodetic(r_ecef_m)
+
+    return FrameState(r_ecef_m=r_ecef_m, lat_deg=lat_deg, lon_deg=lon_deg, alt_m=alt_m)
 
 
 def append_ecef_and_geodetic_columns(df):
