@@ -19,6 +19,8 @@ from astropy.coordinates import GCRS, ITRS, CartesianRepresentation
 from astropy.time import Time
 from astropy.utils import iers
 
+from simulation.types import FrameState, OrbitState
+
 
 def _configure_iers_offline() -> None:
     """Keep Astropy frame transforms deterministic without network access."""
@@ -70,7 +72,7 @@ def _check_vector_inputs(vectors: np.ndarray, lat_deg: np.ndarray, lon_deg: np.n
         raise ValueError("Latitude and longitude arrays must match vector length.")
 
 
-def eci_to_ecef_positions(r_eci_m: np.ndarray, time_utc: np.ndarray) -> np.ndarray:
+def eci_to_ecef_positions(r_eci_m: np.ndarray, time_utc: Any) -> np.ndarray:
     """
     Convert ECI/GCRS-like position vectors to ECEF/ITRS positions.
 
@@ -124,27 +126,13 @@ def ecef_to_geodetic(r_ecef_m: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.n
     )
 
 
-def append_ecef_and_geodetic_columns(df):
-    """Append ECEF position and geodetic coordinates to an orbit DataFrame."""
+def compute_frame_state(orbit: OrbitState) -> FrameState:
+    """Compute ECEF positions and geodetic coordinates from an orbit state."""
 
-    r_eci_m = df[["x_eci_m", "y_eci_m", "z_eci_m"]].to_numpy()
-    time_utc = df["t_utc"].to_numpy()
-
-    r_ecef_m = eci_to_ecef_positions(r_eci_m, time_utc)
+    r_ecef_m = eci_to_ecef_positions(orbit.r_eci_m, orbit.t_utc)
     lat_deg, lon_deg, alt_m = ecef_to_geodetic(r_ecef_m)
 
-    df = df.copy()
-    df["x_ecef_m"] = r_ecef_m[:, 0]
-    df["y_ecef_m"] = r_ecef_m[:, 1]
-    df["z_ecef_m"] = r_ecef_m[:, 2]
-    df["lat_deg"] = lat_deg
-    df["lon_deg"] = lon_deg
-    df["alt_m"] = alt_m
-    df["lat_rad"] = np.deg2rad(lat_deg)
-    df["lon_rad"] = np.deg2rad(lon_deg)
-    df["alt_km"] = alt_m / 1000.0
-
-    return df
+    return FrameState(r_ecef_m=r_ecef_m, lat_deg=lat_deg, lon_deg=lon_deg, alt_m=alt_m)
 
 
 def ned_to_ecef_vectors(b_ned: np.ndarray, lat_deg: np.ndarray, lon_deg: np.ndarray) -> np.ndarray:
@@ -193,7 +181,7 @@ def ned_to_ecef_vectors(b_ned: np.ndarray, lat_deg: np.ndarray, lon_deg: np.ndar
 
 
 def ecef_vectors_to_eci(
-    vectors_ecef: np.ndarray, r_ecef_m: np.ndarray, time_utc: np.ndarray
+    vectors_ecef: np.ndarray, r_ecef_m: np.ndarray, time_utc: Any
 ) -> np.ndarray:
     """
     Convert vectors from ECEF/ITRS to ECI/GCRS-like coordinates.
@@ -253,7 +241,10 @@ def ecef_vectors_to_eci(
     return vectors_eci
 
 
-def add_frame_columns(df):
-    """Backward-compatible alias for appending ECEF and geodetic columns."""
+class AstropyFrameTransformer:
+    """Adapter exposing the current Astropy/pymap3d frame transformation path."""
 
-    return append_ecef_and_geodetic_columns(df)
+    def compute(self, orbit: OrbitState) -> FrameState:
+        """Compute ECEF and geodetic data from an orbit state."""
+
+        return compute_frame_state(orbit)

@@ -1,11 +1,5 @@
-"""
-Configuration of the reference orbit used in the project.
+"""Configuration loading and validation for simulation inputs."""
 
-This module loads the classical orbital elements and simulation settings from
-YAML files. The orbit is later propagated using poliastro.
-"""
-
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -14,35 +8,16 @@ import astropy.units as u
 import yaml
 from astropy.time import Time
 
+from simulation.types import (
+    AttitudeConfig,
+    ArrayFloat64,
+    ClassicalOrbitalElements,
+    SimulationConfig,
+)
+
 DEFAULT_SETTINGS_DIR = Path(__file__).resolve().parent / "settings"
 DEFAULT_ORBIT_CONFIG_PATH = DEFAULT_SETTINGS_DIR / "orbit.yaml"
-
-
-@dataclass(frozen=True)
-class ClassicalOrbitalElements:
-    """
-    Classical Keplerian orbital elements.
-
-    All angular quantities are stored as astropy quantities.
-    """
-
-    semi_major_axis: u.Quantity
-    eccentricity: u.Quantity
-    inclination: u.Quantity
-    raan: u.Quantity
-    argument_of_perigee: u.Quantity
-    true_anomaly: u.Quantity
-    epoch: Time
-
-
-@dataclass(frozen=True)
-class SimulationConfig:
-    """
-    Time configuration of the simulation.
-    """
-
-    duration_s: float
-    time_step_s: float
+DEFAULT_SATELLITE_CONFIG_PATH = DEFAULT_SETTINGS_DIR / "satellite.yaml"
 
 
 def load_yaml_file(path: Path) -> dict[str, Any]:
@@ -95,6 +70,54 @@ def _get_string(section: dict[str, Any], key: str) -> str:
     return value
 
 
+def _get_vector(section: dict[str, Any], key: str, length: int = 3) -> ArrayFloat64:
+    """Return a required numeric vector YAML value."""
+
+    value = section.get(key)
+    vector = np.asarray(value, dtype=np.float64)
+
+    if vector.shape != (length,):
+        raise ValueError(f"Missing or invalid vector value: {key}")
+
+    return vector
+
+
+def _get_matrix(section: dict[str, Any], key: str, shape: tuple[int, int] = (3, 3)) -> ArrayFloat64:
+    """Return a required numeric matrix YAML value."""
+
+    value = section.get(key)
+    matrix = np.asarray(value, dtype=np.float64)
+
+    if matrix.shape != shape:
+        raise ValueError(f"Missing or invalid matrix value: {key}")
+
+    return matrix
+
+
+def _normalize_quaternion(quaternion: ArrayFloat64) -> ArrayFloat64:
+    """Normalize a scalar-first quaternion."""
+
+    norm = np.linalg.norm(quaternion)
+
+    if norm <= 0.0:
+        raise ValueError("Quaternion must have non-zero norm.")
+
+    return quaternion / norm
+
+
+def _validate_attitude_config(config: AttitudeConfig) -> None:
+    """Validate mass, inertia and quaternion values used by attitude dynamics."""
+
+    if config.mass_kg <= 0.0:
+        raise ValueError("Satellite mass must be positive.")
+
+    if not np.allclose(config.inertia_kg_m2, config.inertia_kg_m2.T):
+        raise ValueError("Inertia matrix must be symmetric.")
+
+    if np.any(np.linalg.eigvalsh(config.inertia_kg_m2) <= 0.0):
+        raise ValueError("Inertia matrix must be positive definite.")
+
+
 def create_orbit_from_yaml(path: Path = DEFAULT_ORBIT_CONFIG_PATH) -> ClassicalOrbitalElements:
     """
     Create classical orbital elements from a YAML configuration file.
@@ -128,6 +151,33 @@ def create_simulation_config_from_yaml(path: Path = DEFAULT_ORBIT_CONFIG_PATH) -
     )
 
 
+def create_attitude_config_from_yaml(path: Path = DEFAULT_SATELLITE_CONFIG_PATH) -> AttitudeConfig:
+    """
+    Create attitude and satellite settings from a YAML configuration file.
+    """
+
+    data = load_yaml_file(path)
+    satellite = _get_section(data, "satellite")
+    attitude = _get_section(data, "attitude")
+    integration = _get_section(attitude, "integration")
+
+    config = AttitudeConfig(
+        mass_kg=_get_float(satellite, "mass_kg"),
+        inertia_kg_m2=_get_matrix(satellite, "inertia_kg_m2"),
+        initial_quaternion_eci_from_body=_normalize_quaternion(
+            _get_vector(attitude, "initial_quaternion_eci_from_body", length=4)
+        ),
+        initial_omega_body_radps=np.deg2rad(_get_vector(attitude, "initial_omega_body_degps")),
+        torque_body_nm=_get_vector(attitude, "torque_body_nm"),
+        integration_method=_get_string(integration, "method"),
+        rtol=_get_float(integration, "rtol"),
+        atol=_get_float(integration, "atol"),
+    )
+    _validate_attitude_config(config)
+
+    return config
+
+
 def create_default_orbit() -> ClassicalOrbitalElements:
     """
     Create the default LEO orbit from the YAML configuration.
@@ -152,3 +202,11 @@ def create_default_simulation_config() -> SimulationConfig:
     """
 
     return create_simulation_config_from_yaml(DEFAULT_ORBIT_CONFIG_PATH)
+
+
+def create_default_attitude_config() -> AttitudeConfig:
+    """
+    Create default attitude settings from the YAML configuration.
+    """
+
+    return create_attitude_config_from_yaml(DEFAULT_SATELLITE_CONFIG_PATH)

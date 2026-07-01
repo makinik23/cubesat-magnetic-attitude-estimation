@@ -41,10 +41,12 @@ lint = [
     "flake8 .",
     "mypy .",
 ]
+test = "python -m unittest discover simulation/tests"
 check = [
     "black --check .",
     "flake8 .",
     "mypy .",
+    "python -m unittest discover simulation/tests",
 ]
 simulate = "python main.py"
 
