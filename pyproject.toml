@@ -32,7 +32,7 @@ dependencies = [
 
 [tool.hatch.envs.default.env-vars]
 MPLBACKEND = "Agg"
-MPLCONFIGDIR = "/private/tmp"
+MPLCONFIGDIR = "/tmp"
 
 [tool.hatch.envs.default.scripts]
 format = "black ."
@@ -41,12 +41,13 @@ lint = [
     "flake8 .",
     "mypy .",
 ]
-test = "python -m unittest discover simulation/tests"
+unit-tests = "python -m unittest discover simulation/tests"
+test = "unit-tests"
 check = [
     "black --check .",
     "flake8 .",
     "mypy .",
-    "python -m unittest discover simulation/tests",
+    "unit-tests",
 ]
 simulate = "python main.py"
 

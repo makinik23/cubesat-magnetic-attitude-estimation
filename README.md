@@ -63,6 +63,7 @@ Generated outputs:
 ```bash
 hatch run format
 hatch run check
+hatch run unit-tests
 ```
 
 `hatch run check` runs:
@@ -70,6 +71,9 @@ hatch run check
 - `black --check .`
 - `flake8 .`
 - `mypy .`
+
+The GitHub Actions CI workflow runs format checks, static analysis, and
+unit tests on pushes and pull requests.
 
 ## Notes
 
