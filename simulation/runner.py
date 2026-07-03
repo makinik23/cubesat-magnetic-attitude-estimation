@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from simulation.attitude import RotationBodyFieldProjector, SolveIvpAttitudePropagator
-from simulation.frames import AstropyFrameTransformer
+from simulation.frames import Pymap3dFrameTransformer
 from simulation.geomagnetic import IgrfMagneticFieldModel
 from simulation.interfaces import (
     AttitudePropagator,
@@ -28,7 +28,7 @@ class SimulationRunner:
     """Run the full simulation with injectable numerical strategies."""
 
     orbit_propagator: OrbitPropagator = field(default_factory=PoliastroKeplerPropagator)
-    frame_transformer: FrameTransformer = field(default_factory=AstropyFrameTransformer)
+    frame_transformer: FrameTransformer = field(default_factory=Pymap3dFrameTransformer)
     magnetic_field_model: MagneticFieldModel = field(default_factory=IgrfMagneticFieldModel)
     attitude_propagator: AttitudePropagator = field(default_factory=SolveIvpAttitudePropagator)
     body_field_projector: BodyFieldProjector = field(default_factory=RotationBodyFieldProjector)

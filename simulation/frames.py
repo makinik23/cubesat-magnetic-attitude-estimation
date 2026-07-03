@@ -1,21 +1,19 @@
 """
 Reference-frame and geodetic conversion utilities.
 
-The current pipeline assumes that the inertial vectors produced by poliastro
-can be interpreted as GCRS-like ECI vectors for this early project milestone.
-This assumption is good enough for the first engineering plots, but should be
-revisited if the project later requires high-fidelity frame consistency.
+The current pipeline delegates ECI/ECEF transforms to pymap3d. With Astropy
+available, pymap3d uses the GCRS <-> ITRS transform path instead of the lower
+accuracy Vallado/GMST-only fallback.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
+import inspect
 from typing import Any
 
-import astropy.units as u
 import numpy as np
 import pymap3d as pm
-from astropy.coordinates import GCRS, ITRS, CartesianRepresentation
 from astropy.time import Time
 from astropy.utils import iers
 
@@ -23,9 +21,23 @@ from simulation.types import FrameState, OrbitState
 
 
 def _configure_iers_offline() -> None:
-    """Keep Astropy frame transforms deterministic without network access."""
+    """Keep Astropy-backed transforms deterministic without network access."""
 
     iers.conf.auto_download = False
+
+
+def _pymap3d_astropy_kwargs(function: Any) -> dict[str, bool]:
+    """Return keyword arguments that select pymap3d's Astropy-backed path."""
+
+    parameters = inspect.signature(function).parameters
+
+    if "force_non_astropy" in parameters:
+        return {"force_non_astropy": False}
+
+    if "useastropy" in parameters:
+        return {"useastropy": True}
+
+    return {}
 
 
 def _as_time_array(time_utc: Any) -> Time:
@@ -34,6 +46,8 @@ def _as_time_array(time_utc: Any) -> Time:
     _configure_iers_offline()
 
     if isinstance(time_utc, Time):
+        if time_utc.isscalar:
+            return Time([time_utc])
         return time_utc
 
     time_values = np.atleast_1d(time_utc)
@@ -51,10 +65,28 @@ def _as_time_array(time_utc: Any) -> Time:
     return Time([str(value) for value in values], format="isot", scale="utc")
 
 
+def _as_datetime_array(time_utc: Any) -> np.ndarray:
+    """Convert UTC timestamps to Python datetimes for pymap3d."""
+
+    times = _as_time_array(time_utc)
+    return np.atleast_1d(times.to_datetime())
+
+
 def _as_position_array(r_m: Any, name: str) -> np.ndarray:
     """Convert position values to a float64 array with shape (N, 3)."""
 
     array = np.asarray(r_m, dtype=np.float64)
+
+    if array.ndim != 2 or array.shape[1] != 3:
+        raise ValueError(f"{name} must have shape (N, 3).")
+
+    return array
+
+
+def _as_vector_array(vectors: Any, name: str) -> np.ndarray:
+    """Convert vector values to a float64 array with shape (N, 3)."""
+
+    array = np.asarray(vectors, dtype=np.float64)
 
     if array.ndim != 2 or array.shape[1] != 3:
         raise ValueError(f"{name} must have shape (N, 3).")
@@ -74,7 +106,7 @@ def _check_vector_inputs(vectors: np.ndarray, lat_deg: np.ndarray, lon_deg: np.n
 
 def eci_to_ecef_positions(r_eci_m: np.ndarray, time_utc: Any) -> np.ndarray:
     """
-    Convert ECI/GCRS-like position vectors to ECEF/ITRS positions.
+    Convert ECI position vectors to ECEF positions via pymap3d.
 
     Parameters
     ----------
@@ -86,24 +118,30 @@ def eci_to_ecef_positions(r_eci_m: np.ndarray, time_utc: Any) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        Position vectors in ECEF/ITRS [m], shape (N, 3).
+        Position vectors in ECEF [m], shape (N, 3).
     """
 
     r_eci_m = _as_position_array(r_eci_m, "r_eci_m")
-    times = _as_time_array(time_utc)
+    times = _as_datetime_array(time_utc)
 
     if len(times) != len(r_eci_m):
         raise ValueError("time_utc must have the same length as r_eci_m.")
 
-    representation = CartesianRepresentation(
-        x=r_eci_m[:, 0] * u.m, y=r_eci_m[:, 1] * u.m, z=r_eci_m[:, 2] * u.m
+    x_ecef, y_ecef, z_ecef = pm.eci2ecef(
+        r_eci_m[:, 0],
+        r_eci_m[:, 1],
+        r_eci_m[:, 2],
+        times,
+        **_pymap3d_astropy_kwargs(pm.eci2ecef),
     )
 
-    gcrs = GCRS(representation, obstime=times)
-    itrs = gcrs.transform_to(ITRS(obstime=times))
-    cart = itrs.cartesian
-
-    return np.column_stack([cart.x.to_value(u.m), cart.y.to_value(u.m), cart.z.to_value(u.m)])
+    return np.column_stack(
+        [
+            np.atleast_1d(np.asarray(x_ecef, dtype=np.float64)),
+            np.atleast_1d(np.asarray(y_ecef, dtype=np.float64)),
+            np.atleast_1d(np.asarray(z_ecef, dtype=np.float64)),
+        ]
+    )
 
 
 def ecef_to_geodetic(r_ecef_m: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -160,89 +198,71 @@ def ned_to_ecef_vectors(b_ned: np.ndarray, lat_deg: np.ndarray, lon_deg: np.ndar
 
     _check_vector_inputs(b_ned, lat_deg, lon_deg)
 
-    lat_rad = np.deg2rad(lat_deg)
-    lon_rad = np.deg2rad(lon_deg)
+    x_ecef, y_ecef, z_ecef = pm.enu2ecefv(
+        b_ned[:, 1], b_ned[:, 0], -b_ned[:, 2], lat_deg, lon_deg, deg=True
+    )
 
-    b_ecef = np.empty_like(b_ned, dtype=float)
-
-    for idx, (vector_ned, lat, lon) in enumerate(zip(b_ned, lat_rad, lon_rad)):
-        sin_lat = np.sin(lat)
-        cos_lat = np.cos(lat)
-        sin_lon = np.sin(lon)
-        cos_lon = np.cos(lon)
-
-        north = np.array([-sin_lat * cos_lon, -sin_lat * sin_lon, cos_lat])
-        east = np.array([-sin_lon, cos_lon, 0.0])
-        down = np.array([-cos_lat * cos_lon, -cos_lat * sin_lon, -sin_lat])
-
-        b_ecef[idx] = vector_ned[0] * north + vector_ned[1] * east + vector_ned[2] * down
-
-    return b_ecef
+    return np.column_stack([x_ecef, y_ecef, z_ecef]).astype(np.float64)
 
 
-def ecef_vectors_to_eci(
-    vectors_ecef: np.ndarray, r_ecef_m: np.ndarray, time_utc: Any
-) -> np.ndarray:
+def eci_vectors_to_ecef(vectors_eci: np.ndarray, time_utc: Any) -> np.ndarray:
     """
-    Convert vectors from ECEF/ITRS to ECI/GCRS-like coordinates.
-
-    Astropy handles coordinates rather than free vectors directly here, so this
-    function estimates the local rotation by transforming a base point and three
-    one-meter displaced points. This is slower than using a precomputed rotation
-    matrix, but it is explicit and robust enough for this early milestone.
+    Convert free vectors from ECI coordinates to ECEF coordinates via pymap3d.
     """
 
-    vectors_ecef = np.asarray(vectors_ecef, dtype=np.float64)
-    r_ecef_m = _as_position_array(r_ecef_m, "r_ecef_m")
-    times = _as_time_array(time_utc)
+    vectors_eci = _as_vector_array(vectors_eci, "vectors_eci")
+    times = _as_datetime_array(time_utc)
 
-    if vectors_ecef.shape != r_ecef_m.shape:
-        raise ValueError("vectors_ecef and r_ecef_m must both have shape (N, 3).")
+    if len(times) != len(vectors_eci):
+        raise ValueError("time_utc must have the same length as vectors_eci.")
+
+    x_ecef, y_ecef, z_ecef = pm.eci2ecef(
+        vectors_eci[:, 0],
+        vectors_eci[:, 1],
+        vectors_eci[:, 2],
+        times,
+        **_pymap3d_astropy_kwargs(pm.eci2ecef),
+    )
+
+    return np.column_stack(
+        [
+            np.atleast_1d(np.asarray(x_ecef, dtype=np.float64)),
+            np.atleast_1d(np.asarray(y_ecef, dtype=np.float64)),
+            np.atleast_1d(np.asarray(z_ecef, dtype=np.float64)),
+        ]
+    )
+
+
+def ecef_vectors_to_eci(vectors_ecef: np.ndarray, time_utc: Any) -> np.ndarray:
+    """
+    Convert free vectors from ECEF coordinates to ECI coordinates via pymap3d.
+    """
+
+    vectors_ecef = _as_vector_array(vectors_ecef, "vectors_ecef")
+    times = _as_datetime_array(time_utc)
 
     if len(times) != len(vectors_ecef):
         raise ValueError("time_utc must have the same length as vectors_ecef.")
 
-    vectors_eci = np.empty_like(vectors_ecef, dtype=float)
+    x_eci, y_eci, z_eci = pm.ecef2eci(
+        vectors_ecef[:, 0],
+        vectors_ecef[:, 1],
+        vectors_ecef[:, 2],
+        times,
+        **_pymap3d_astropy_kwargs(pm.ecef2eci),
+    )
 
-    basis_ecef = np.eye(3)
-
-    for idx, (vector_ecef, position_ecef, time) in enumerate(zip(vectors_ecef, r_ecef_m, times)):
-        base_itrs = ITRS(
-            CartesianRepresentation(
-                position_ecef[0] * u.m, position_ecef[1] * u.m, position_ecef[2] * u.m
-            ),
-            obstime=time,
-        )
-        base_gcrs = base_itrs.transform_to(GCRS(obstime=time)).cartesian
-        base_eci = np.array(
-            [base_gcrs.x.to_value(u.m), base_gcrs.y.to_value(u.m), base_gcrs.z.to_value(u.m)]
-        )
-
-        rotation_eci_from_ecef = np.empty((3, 3), dtype=float)
-
-        for col, basis_vector in enumerate(basis_ecef):
-            shifted = position_ecef + basis_vector
-            shifted_itrs = ITRS(
-                CartesianRepresentation(shifted[0] * u.m, shifted[1] * u.m, shifted[2] * u.m),
-                obstime=time,
-            )
-            shifted_gcrs = shifted_itrs.transform_to(GCRS(obstime=time)).cartesian
-            shifted_eci = np.array(
-                [
-                    shifted_gcrs.x.to_value(u.m),
-                    shifted_gcrs.y.to_value(u.m),
-                    shifted_gcrs.z.to_value(u.m),
-                ]
-            )
-            rotation_eci_from_ecef[:, col] = shifted_eci - base_eci
-
-        vectors_eci[idx] = rotation_eci_from_ecef @ vector_ecef
-
-    return vectors_eci
+    return np.column_stack(
+        [
+            np.atleast_1d(np.asarray(x_eci, dtype=np.float64)),
+            np.atleast_1d(np.asarray(y_eci, dtype=np.float64)),
+            np.atleast_1d(np.asarray(z_eci, dtype=np.float64)),
+        ]
+    )
 
 
-class AstropyFrameTransformer:
-    """Adapter exposing the current Astropy/pymap3d frame transformation path."""
+class Pymap3dFrameTransformer:
+    """Adapter exposing the current pymap3d frame transformation path."""
 
     def compute(self, orbit: OrbitState) -> FrameState:
         """Compute ECEF and geodetic data from an orbit state."""
