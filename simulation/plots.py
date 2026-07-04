@@ -224,6 +224,52 @@ def plot_attitude_orientation(df: pd.DataFrame, output_dir: Path) -> None:
     plt.close()
 
 
+def plot_attitude_quaternion(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot attitude quaternion components and norm over time."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(8, 6))
+
+    axes[0].plot(df["t_s"], df["q_eci_from_body_w"], label="q_w")
+    axes[0].plot(df["t_s"], df["q_eci_from_body_x"], label="q_x")
+    axes[0].plot(df["t_s"], df["q_eci_from_body_y"], label="q_y")
+    axes[0].plot(df["t_s"], df["q_eci_from_body_z"], label="q_z")
+    axes[0].set_ylabel("Quaternion component [-]")
+    axes[0].set_title("Attitude quaternion over time")
+    axes[0].grid(True)
+    axes[0].legend()
+
+    axes[1].plot(df["t_s"], df["q_eci_from_body_norm"], label="|q|")
+    axes[1].set_xlabel("Time [s]")
+    axes[1].set_ylabel("Quaternion norm [-]")
+    axes[1].grid(True)
+    axes[1].legend()
+
+    plt.tight_layout()
+    plt.savefig(output_dir / "attitude_quaternion.png", dpi=200)
+    plt.close(fig)
+
+
+def plot_angular_velocity_body(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot body-frame angular velocity components over time."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    plt.figure()
+    plt.plot(df["t_s"], np.rad2deg(df["omega_body_x_radps"]), label="omega_x body")
+    plt.plot(df["t_s"], np.rad2deg(df["omega_body_y_radps"]), label="omega_y body")
+    plt.plot(df["t_s"], np.rad2deg(df["omega_body_z_radps"]), label="omega_z body")
+    plt.xlabel("Time [s]")
+    plt.ylabel("Angular velocity [deg/s]")
+    plt.title("Body angular velocity components")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(output_dir / "angular_velocity_body.png", dpi=200)
+    plt.close()
+
+
 def _cube_vertices() -> np.ndarray:
     """Create unit cube vertices in body coordinates."""
 

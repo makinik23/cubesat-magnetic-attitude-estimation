@@ -81,7 +81,7 @@ def compute_magnetic_field_state(orbit: OrbitState, frame: FrameState) -> Magnet
     b_ned_nt = compute_igrf_ned_nt(frame.lat_deg, frame.lon_deg, frame.alt_m, orbit.t_utc)
     b_ned_t = b_ned_nt * 1e-9
     b_ecef_t = ned_to_ecef_vectors(b_ned_t, frame.lat_deg, frame.lon_deg)
-    b_eci_t = ecef_vectors_to_eci(b_ecef_t, frame.r_ecef_m, orbit.t_utc)
+    b_eci_t = ecef_vectors_to_eci(b_ecef_t, orbit.t_utc)
 
     return MagneticFieldState(b_ned_nt=b_ned_nt, b_ecef_t=b_ecef_t, b_eci_t=b_eci_t)
 
