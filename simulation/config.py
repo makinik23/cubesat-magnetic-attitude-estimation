@@ -8,6 +8,7 @@ import astropy.units as u
 import yaml
 from astropy.time import Time
 
+from simulation.helpers import as_float_matrix, as_float_vector, normalize_quaternion
 from simulation.types import (
     AttitudeConfig,
     ArrayFloat64,
@@ -74,35 +75,26 @@ def _get_vector(section: dict[str, Any], key: str, length: int = 3) -> ArrayFloa
     """Return a required numeric vector YAML value."""
 
     value = section.get(key)
-    vector = np.asarray(value, dtype=np.float64)
 
-    if vector.shape != (length,):
-        raise ValueError(f"Missing or invalid vector value: {key}")
-
-    return vector
+    try:
+        return as_float_vector(value, key, length=length)
+    except ValueError as exc:
+        raise ValueError(f"Missing or invalid vector value: {key}") from exc
+    except TypeError as exc:
+        raise ValueError(f"Missing or invalid vector value: {key}") from exc
 
 
 def _get_matrix(section: dict[str, Any], key: str, shape: tuple[int, int] = (3, 3)) -> ArrayFloat64:
     """Return a required numeric matrix YAML value."""
 
     value = section.get(key)
-    matrix = np.asarray(value, dtype=np.float64)
 
-    if matrix.shape != shape:
-        raise ValueError(f"Missing or invalid matrix value: {key}")
-
-    return matrix
-
-
-def _normalize_quaternion(quaternion: ArrayFloat64) -> ArrayFloat64:
-    """Normalize a scalar-first quaternion."""
-
-    norm = np.linalg.norm(quaternion)
-
-    if norm <= 0.0:
-        raise ValueError("Quaternion must have non-zero norm.")
-
-    return quaternion / norm
+    try:
+        return as_float_matrix(value, key, shape=shape)
+    except ValueError as exc:
+        raise ValueError(f"Missing or invalid matrix value: {key}") from exc
+    except TypeError as exc:
+        raise ValueError(f"Missing or invalid matrix value: {key}") from exc
 
 
 def _validate_attitude_config(config: AttitudeConfig) -> None:
@@ -164,7 +156,7 @@ def create_attitude_config_from_yaml(path: Path = DEFAULT_SATELLITE_CONFIG_PATH)
     config = AttitudeConfig(
         mass_kg=_get_float(satellite, "mass_kg"),
         inertia_kg_m2=_get_matrix(satellite, "inertia_kg_m2"),
-        initial_quaternion_eci_from_body=_normalize_quaternion(
+        initial_quaternion_eci_from_body=normalize_quaternion(
             _get_vector(attitude, "initial_quaternion_eci_from_body", length=4)
         ),
         initial_omega_body_radps=np.deg2rad(_get_vector(attitude, "initial_omega_body_degps")),

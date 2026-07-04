@@ -53,6 +53,7 @@ class SimulationRunnerTests(unittest.TestCase):
             det_rotation=np.ones(2, dtype=np.float64),
         )
         b_body_t = np.ones((2, 3), dtype=np.float64) * 4e-6
+        b_magnetometer_t = np.ones((2, 3), dtype=np.float64) * 5e-6
 
         class OrbitStrategy:
             def propagate(
@@ -87,6 +88,12 @@ class SimulationRunnerTests(unittest.TestCase):
                 calls.append("body")
                 return b_body_t
 
+        class MagnetometerStrategy:
+            def measure(self, vectors_body: np.ndarray) -> np.ndarray:
+                np.testing.assert_allclose(vectors_body, b_body_t)
+                calls.append("magnetometer")
+                return b_magnetometer_t
+
         elements = ClassicalOrbitalElements(
             semi_major_axis=7_000_000.0 * u.m,
             eccentricity=0.0 * u.one,
@@ -113,16 +120,18 @@ class SimulationRunnerTests(unittest.TestCase):
             magnetic_field_model=MagneticStrategy(),
             attitude_propagator=AttitudeStrategy(),
             body_field_projector=BodyProjector(),
+            magnetometer_model=MagnetometerStrategy(),
         )
 
         result = runner.run(elements, simulation_config, attitude_config)
 
-        self.assertEqual(calls, ["orbit", "frame", "magnetic", "attitude", "body"])
+        self.assertEqual(calls, ["orbit", "frame", "magnetic", "attitude", "body", "magnetometer"])
         self.assertIs(result.orbit, orbit_state)
         self.assertIs(result.frame, frame_state)
         self.assertIs(result.magnetic_field, magnetic_state)
         self.assertIs(result.attitude, attitude_state)
         np.testing.assert_allclose(result.b_body_t, b_body_t)
+        np.testing.assert_allclose(result.b_magnetometer_t, b_magnetometer_t)
 
 
 if __name__ == "__main__":

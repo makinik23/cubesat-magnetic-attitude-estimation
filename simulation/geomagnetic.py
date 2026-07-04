@@ -12,21 +12,10 @@ from typing import Any
 
 import numpy as np
 import ppigrf
-from astropy.time import Time
 
 from simulation.frames import ecef_vectors_to_eci, ned_to_ecef_vectors
+from simulation.helpers import as_time_array
 from simulation.types import FrameState, MagneticFieldState, OrbitState
-
-
-def _as_time_array(time_utc: Any) -> Time:
-    """Convert UTC timestamps to an astropy Time array."""
-
-    if isinstance(time_utc, Time):
-        if time_utc.isscalar:
-            return Time([time_utc])
-        return time_utc
-
-    return Time([str(value) for value in np.atleast_1d(time_utc)], format="isot", scale="utc")
 
 
 def compute_igrf_ned_nt(
@@ -44,7 +33,7 @@ def compute_igrf_ned_nt(
     lat_deg = np.asarray(lat_deg, dtype=np.float64)
     lon_deg = np.asarray(lon_deg, dtype=np.float64)
     alt_m = np.asarray(alt_m, dtype=np.float64)
-    times = _as_time_array(time_utc)
+    times = as_time_array(time_utc)
 
     if lat_deg.ndim != 1 or lon_deg.ndim != 1 or alt_m.ndim != 1:
         raise ValueError("lat_deg, lon_deg and alt_m must be one-dimensional arrays.")

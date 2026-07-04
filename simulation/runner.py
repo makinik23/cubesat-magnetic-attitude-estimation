@@ -11,10 +11,12 @@ from simulation.interfaces import (
     AttitudePropagator,
     BodyFieldProjector,
     FrameTransformer,
+    Magnetometer,
     MagneticFieldModel,
     OrbitPropagator,
 )
 from simulation.orbit_provider import PoliastroKeplerPropagator
+from simulation.sensors import MagnetometerModel
 from simulation.types import (
     AttitudeConfig,
     ClassicalOrbitalElements,
@@ -32,6 +34,7 @@ class SimulationRunner:
     magnetic_field_model: MagneticFieldModel = field(default_factory=IgrfMagneticFieldModel)
     attitude_propagator: AttitudePropagator = field(default_factory=SolveIvpAttitudePropagator)
     body_field_projector: BodyFieldProjector = field(default_factory=RotationBodyFieldProjector)
+    magnetometer_model: Magnetometer = field(default_factory=MagnetometerModel)
 
     def run(
         self,
@@ -45,6 +48,7 @@ class SimulationRunner:
         magnetic_field = self.magnetic_field_model.compute(orbit, frame)
         attitude = self.attitude_propagator.propagate(orbit.t_s, attitude_config)
         b_body_t = self.body_field_projector.project(magnetic_field.b_eci_t, attitude)
+        b_magnetometer_t = self.magnetometer_model.measure(b_body_t)
 
         return SimulationResult(
             orbit=orbit,
@@ -52,4 +56,5 @@ class SimulationRunner:
             magnetic_field=magnetic_field,
             attitude=attitude,
             b_body_t=b_body_t,
+            b_magnetometer_t=b_magnetometer_t,
         )

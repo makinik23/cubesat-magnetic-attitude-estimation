@@ -54,3 +54,11 @@ class BodyFieldProjector(Protocol):
     def project(self, vectors_eci: ArrayFloat64, attitude: AttitudeState) -> ArrayFloat64:
         """Return vectors expressed in body-frame coordinates."""
         raise NotImplementedError
+
+
+class Magnetometer(Protocol):
+    """Measures body-frame magnetic-field vectors."""
+
+    def measure(self, b_body_t: ArrayFloat64) -> ArrayFloat64:
+        """Return magnetic-field measurements in body-frame coordinates."""
+        raise NotImplementedError

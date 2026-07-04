@@ -58,6 +58,10 @@ RESULT_COLUMNS = [
     "By_body_T",
     "Bz_body_T",
     "B_body_norm_T",
+    "Bx_magnetometer_T",
+    "By_magnetometer_T",
+    "Bz_magnetometer_T",
+    "B_magnetometer_norm_T",
     "det_R_eci_from_body",
     "RT_R_minus_I_fro",
     "RT_R_minus_I_11",
@@ -80,6 +84,7 @@ def build_results_dataframe(result: SimulationResult) -> pd.DataFrame:
     magnetic_field = result.magnetic_field
     attitude = result.attitude
     b_body_t = result.b_body_t
+    b_magnetometer_t = result.b_magnetometer_t
 
     df = pd.DataFrame(
         {
@@ -119,6 +124,9 @@ def build_results_dataframe(result: SimulationResult) -> pd.DataFrame:
             "Bx_body_T": b_body_t[:, 0],
             "By_body_T": b_body_t[:, 1],
             "Bz_body_T": b_body_t[:, 2],
+            "Bx_magnetometer_T": b_magnetometer_t[:, 0],
+            "By_magnetometer_T": b_magnetometer_t[:, 1],
+            "Bz_magnetometer_T": b_magnetometer_t[:, 2],
             "det_R_eci_from_body": attitude.det_rotation,
         }
     )
@@ -135,6 +143,7 @@ def build_results_dataframe(result: SimulationResult) -> pd.DataFrame:
     df["roll_eci_from_body_deg"] = np.rad2deg(attitude.euler_zyx_rad[:, 2])
     df["q_eci_from_body_norm"] = np.linalg.norm(attitude.q_eci_from_body, axis=1)
     df["B_body_norm_T"] = np.linalg.norm(b_body_t, axis=1)
+    df["B_magnetometer_norm_T"] = np.linalg.norm(b_magnetometer_t, axis=1)
     df["RT_R_minus_I_fro"] = np.linalg.norm(attitude.rt_r_minus_i, axis=(1, 2))
 
     for row in range(3):

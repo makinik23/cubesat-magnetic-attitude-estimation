@@ -2,26 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 
+from simulation.helpers import as_float_vector, as_float_vector_array
+from simulation.interfaces import Magnetometer
 from simulation.types import ArrayFloat64
-
-
-def _as_body_vector(values: Any, name: str) -> ArrayFloat64:
-    """Convert values to a finite float64 vector with shape (3,)."""
-
-    array = np.asarray(values, dtype=np.float64)
-
-    if array.shape != (3,):
-        raise ValueError(f"{name} must have shape (3,).")
-
-    if not np.all(np.isfinite(array)):
-        raise ValueError(f"{name} must contain only finite values.")
-
-    return array
 
 
 def _as_noise_std(values: Any) -> ArrayFloat64:
@@ -41,40 +28,29 @@ def _as_noise_std(values: Any) -> ArrayFloat64:
     return array
 
 
-def _as_vector_array(values: Any, name: str) -> ArrayFloat64:
-    """Convert values to a finite float64 array with shape (N, 3)."""
-
-    array = np.asarray(values, dtype=np.float64)
-
-    if array.ndim != 2 or array.shape[1] != 3:
-        raise ValueError(f"{name} must have shape (N, 3).")
-
-    if not np.all(np.isfinite(array)):
-        raise ValueError(f"{name} must contain only finite values.")
-
-    return array
-
-
-@dataclass(slots=True)
-class MagnetometerModel:
+class MagnetometerModel(Magnetometer):
     """Simple body-frame magnetometer with constant bias and Gaussian noise."""
 
-    bias_body_t: ArrayFloat64 = field(default_factory=lambda: np.zeros(3, dtype=np.float64))
-    noise_std_t: float | ArrayFloat64 = 0.0
-    seed: int | None = None
-    _rng: np.random.Generator = field(init=False, repr=False)
+    def __init__(
+        self,
+        bias_body_t: ArrayFloat64 | None = None,
+        noise_std_t: float | ArrayFloat64 = 0.0,
+        seed: int | None = None,
+    ) -> None:
+        """Initialize magnetometer parameters and noise generator."""
 
-    def __post_init__(self) -> None:
-        """Validate parameters and initialize the noise generator."""
+        if bias_body_t is None:
+            bias_body_t = np.zeros(3, dtype=np.float64)
 
-        self.bias_body_t = _as_body_vector(self.bias_body_t, "bias_body_t")
-        self.noise_std_t = _as_noise_std(self.noise_std_t)
+        self.bias_body_t = as_float_vector(bias_body_t, "bias_body_t", finite=True)
+        self.noise_std_t = _as_noise_std(noise_std_t)
+        self.seed = seed
         self._rng = np.random.default_rng(self.seed)
 
     def measure(self, b_body_t: ArrayFloat64) -> ArrayFloat64:
         """Return magnetometer measurements for ideal body-frame field vectors."""
 
-        b_body_t = _as_vector_array(b_body_t, "b_body_t")
+        b_body_t = as_float_vector_array(b_body_t, "b_body_t", finite=True)
         noise_t = self._rng.normal(loc=0.0, scale=self.noise_std_t, size=b_body_t.shape)
 
         return np.asarray(b_body_t + self.bias_body_t + noise_t, dtype=np.float64)

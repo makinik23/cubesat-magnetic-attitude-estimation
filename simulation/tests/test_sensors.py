@@ -13,13 +13,7 @@ class MagnetometerModelTests(unittest.TestCase):
     """Check bias, Gaussian noise and input validation."""
 
     def test_measure_adds_bias_without_noise(self) -> None:
-        b_body_t = np.array(
-            [
-                [20e-6, -5e-6, 30e-6],
-                [21e-6, -4e-6, 29e-6],
-            ],
-            dtype=np.float64,
-        )
+        b_body_t = np.array([[20e-6, -5e-6, 30e-6], [21e-6, -4e-6, 29e-6]], dtype=np.float64)
         bias_body_t = np.array([100e-9, -50e-9, 25e-9], dtype=np.float64)
 
         model = MagnetometerModel(bias_body_t=bias_body_t, noise_std_t=0.0)
@@ -37,8 +31,7 @@ class MagnetometerModelTests(unittest.TestCase):
     def test_supports_per_axis_noise(self) -> None:
         b_body_t = np.zeros((3, 3), dtype=np.float64)
         model = MagnetometerModel(
-            noise_std_t=np.array([1e-9, 2e-9, 3e-9], dtype=np.float64),
-            seed=1,
+            noise_std_t=np.array([1e-9, 2e-9, 3e-9], dtype=np.float64), seed=1
         )
 
         measurement = model.measure(b_body_t)

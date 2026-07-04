@@ -7,34 +7,11 @@ quaternion maps body-frame vectors into ECI.
 
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 from scipy.integrate import solve_ivp
 
+from simulation.helpers import as_float_vector_array, normalize_quaternion
 from simulation.types import ArrayFloat64, AttitudeConfig, AttitudeState
-
-
-def _as_vector_array(values: Any, name: str) -> ArrayFloat64:
-    """Convert values to a float64 array with shape (N, 3)."""
-
-    array = np.asarray(values, dtype=np.float64)
-
-    if array.ndim != 2 or array.shape[1] != 3:
-        raise ValueError(f"{name} must have shape (N, 3).")
-
-    return array
-
-
-def _normalize_quaternion(quaternion: ArrayFloat64) -> ArrayFloat64:
-    """Normalize a scalar-first quaternion."""
-
-    norm = np.linalg.norm(quaternion)
-
-    if norm <= 0.0:
-        raise ValueError("Quaternion must have non-zero norm.")
-
-    return quaternion / norm
 
 
 def quaternion_multiply(left: ArrayFloat64, right: ArrayFloat64) -> ArrayFloat64:
@@ -59,7 +36,7 @@ def quaternion_to_rotation_matrix(quaternion: ArrayFloat64) -> ArrayFloat64:
     Convert a scalar-first quaternion to an ECI-from-body rotation matrix.
     """
 
-    qw, qx, qy, qz = _normalize_quaternion(quaternion)
+    qw, qx, qy, qz = normalize_quaternion(quaternion)
 
     return np.array(
         [
@@ -131,7 +108,7 @@ def rotation_matrix_to_quaternion(rotation_matrix: ArrayFloat64) -> ArrayFloat64
                 dtype=np.float64,
             )
 
-    quaternion = _normalize_quaternion(quaternion)
+    quaternion = normalize_quaternion(quaternion)
 
     if quaternion[0] < 0.0:
         quaternion = -quaternion
@@ -194,7 +171,7 @@ def attitude_state_derivative(
 ) -> ArrayFloat64:
     """Compute the solve_ivp state derivative for attitude propagation."""
 
-    quaternion = _normalize_quaternion(state[:4])
+    quaternion = normalize_quaternion(state[:4])
     omega = state[4:]
     quaternion_dot, omega_dot = rigid_body_derivative(
         quaternion, omega, config.inertia_kg_m2, config.torque_body_nm
@@ -276,7 +253,7 @@ def propagate_attitude(times_s: ArrayFloat64, config: AttitudeConfig) -> Attitud
 def project_eci_vectors_to_body(vectors_eci: ArrayFloat64, attitude: AttitudeState) -> ArrayFloat64:
     """Project ECI-frame vectors into the spacecraft body frame."""
 
-    vectors_eci = _as_vector_array(vectors_eci, "vectors_eci")
+    vectors_eci = as_float_vector_array(vectors_eci, "vectors_eci")
 
     if vectors_eci.shape[0] != attitude.rotation_eci_from_body.shape[0]:
         raise ValueError("vectors_eci and attitude state must have the same length.")
