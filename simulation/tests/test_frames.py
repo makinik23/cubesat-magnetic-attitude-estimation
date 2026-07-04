@@ -6,11 +6,7 @@ import unittest
 
 import numpy as np
 
-from simulation.frames import (
-    ecef_vectors_to_eci,
-    eci_vectors_to_ecef,
-    ned_to_ecef_vectors,
-)
+from simulation.frames import ecef_vectors_to_eci, eci_vectors_to_ecef, ned_to_ecef_vectors
 
 
 class FrameConversionTests(unittest.TestCase):
@@ -37,12 +33,8 @@ class FrameConversionTests(unittest.TestCase):
         )
 
     def test_eci_ecef_vector_round_trip(self) -> None:
-        vectors_eci = np.array(
-            [[1.0, 2.0, 3.0], [-4.0, 5.0, -6.0]], dtype=np.float64
-        )
-        time_utc = np.array(
-            ["2026-01-01T12:00:00.000", "2026-01-01T12:10:00.000"], dtype=str
-        )
+        vectors_eci = np.array([[1.0, 2.0, 3.0], [-4.0, 5.0, -6.0]], dtype=np.float64)
+        time_utc = np.array(["2026-01-01T12:00:00.000", "2026-01-01T12:10:00.000"], dtype=str)
 
         vectors_ecef = eci_vectors_to_ecef(vectors_eci, time_utc)
         round_trip = ecef_vectors_to_eci(vectors_ecef, time_utc)

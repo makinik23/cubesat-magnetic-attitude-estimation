@@ -11,7 +11,9 @@ from simulation.config import (
 )
 from simulation.plots import (
     animate_attitude_cube,
+    plot_angular_velocity_body,
     plot_attitude_orientation,
+    plot_attitude_quaternion,
     plot_magnetic_field_body,
     plot_magnetic_field_body_norm,
     plot_magnetic_field_eci,
@@ -49,6 +51,8 @@ def run_orbit_pipeline(output_dir: Path) -> None:
     plot_magnetic_field_body(df, output_dir)
     plot_magnetic_field_body_norm(df, output_dir)
     plot_attitude_orientation(df, output_dir)
+    plot_attitude_quaternion(df, output_dir)
+    plot_angular_velocity_body(df, output_dir)
     animate_attitude_cube(df, output_dir)
 
     print(f"Saved orbit data to: {csv_path}")
@@ -62,6 +66,8 @@ def run_orbit_pipeline(output_dir: Path) -> None:
     print(f"Saved plot: {output_dir / 'magnetic_field_body.png'}")
     print(f"Saved plot: {output_dir / 'magnetic_field_body_norm.png'}")
     print(f"Saved plot: {output_dir / 'attitude_orientation.png'}")
+    print(f"Saved plot: {output_dir / 'attitude_quaternion.png'}")
+    print(f"Saved plot: {output_dir / 'angular_velocity_body.png'}")
     print(f"Saved animation: {output_dir / 'attitude_cube.gif'}")
 
     print_sanity_check(df)

@@ -44,6 +44,7 @@ RESULT_COLUMNS = [
     "q_eci_from_body_x",
     "q_eci_from_body_y",
     "q_eci_from_body_z",
+    "q_eci_from_body_norm",
     "omega_body_x_radps",
     "omega_body_y_radps",
     "omega_body_z_radps",
@@ -132,6 +133,7 @@ def build_results_dataframe(result: SimulationResult) -> pd.DataFrame:
     df["yaw_eci_from_body_deg"] = np.rad2deg(attitude.euler_zyx_rad[:, 0])
     df["pitch_eci_from_body_deg"] = np.rad2deg(attitude.euler_zyx_rad[:, 1])
     df["roll_eci_from_body_deg"] = np.rad2deg(attitude.euler_zyx_rad[:, 2])
+    df["q_eci_from_body_norm"] = np.linalg.norm(attitude.q_eci_from_body, axis=1)
     df["B_body_norm_T"] = np.linalg.norm(b_body_t, axis=1)
     df["RT_R_minus_I_fro"] = np.linalg.norm(attitude.rt_r_minus_i, axis=(1, 2))
 

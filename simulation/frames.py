@@ -128,11 +128,7 @@ def eci_to_ecef_positions(r_eci_m: np.ndarray, time_utc: Any) -> np.ndarray:
         raise ValueError("time_utc must have the same length as r_eci_m.")
 
     x_ecef, y_ecef, z_ecef = pm.eci2ecef(
-        r_eci_m[:, 0],
-        r_eci_m[:, 1],
-        r_eci_m[:, 2],
-        times,
-        **_pymap3d_astropy_kwargs(pm.eci2ecef),
+        r_eci_m[:, 0], r_eci_m[:, 1], r_eci_m[:, 2], times, **_pymap3d_astropy_kwargs(pm.eci2ecef)
     )
 
     return np.column_stack(
