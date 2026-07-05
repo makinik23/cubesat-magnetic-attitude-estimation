@@ -205,6 +205,25 @@ def plot_magnetic_field_body_norm(df: pd.DataFrame, output_dir: Path) -> None:
     plt.close()
 
 
+def plot_magnetometer_measurement(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot magnetometer measurements in body coordinates."""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    plt.figure()
+    plt.plot(df["t_s"], df["Bx_magnetometer_T"] * 1e6, label="Bx measured")
+    plt.plot(df["t_s"], df["By_magnetometer_T"] * 1e6, label="By measured")
+    plt.plot(df["t_s"], df["Bz_magnetometer_T"] * 1e6, label="Bz measured")
+    plt.xlabel("Time [s]")
+    plt.ylabel("Magnetometer [uT]")
+    plt.title("Magnetometer measurement in body")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(output_dir / "magnetometer_measurement.png", dpi=200)
+    plt.close()
+
+
 def plot_attitude_orientation(df: pd.DataFrame, output_dir: Path) -> None:
     """Plot body orientation angles over time."""
 

@@ -105,3 +105,4 @@ class SimulationResult:
     magnetic_field: MagneticFieldState
     attitude: AttitudeState
     b_body_t: ArrayFloat64
+    b_magnetometer_t: ArrayFloat64

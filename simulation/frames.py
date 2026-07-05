@@ -8,22 +8,14 @@ accuracy Vallado/GMST-only fallback.
 
 from __future__ import annotations
 
-from datetime import datetime
 import inspect
 from typing import Any
 
 import numpy as np
 import pymap3d as pm
-from astropy.time import Time
-from astropy.utils import iers
 
+from simulation.helpers import as_datetime_array, as_float_vector_array
 from simulation.types import FrameState, OrbitState
-
-
-def _configure_iers_offline() -> None:
-    """Keep Astropy-backed transforms deterministic without network access."""
-
-    iers.conf.auto_download = False
 
 
 def _pymap3d_astropy_kwargs(function: Any) -> dict[str, bool]:
@@ -40,65 +32,11 @@ def _pymap3d_astropy_kwargs(function: Any) -> dict[str, bool]:
     return {}
 
 
-def _as_time_array(time_utc: Any) -> Time:
-    """Convert UTC timestamps to an astropy Time array."""
+def _check_coordinate_inputs(vectors: np.ndarray, lat_deg: np.ndarray, lon_deg: np.ndarray) -> None:
+    """Validate geodetic coordinate array shapes against vector length."""
 
-    _configure_iers_offline()
-
-    if isinstance(time_utc, Time):
-        if time_utc.isscalar:
-            return Time([time_utc])
-        return time_utc
-
-    time_values = np.atleast_1d(time_utc)
-
-    if np.issubdtype(time_values.dtype, np.datetime64):
-        return Time(time_values, format="datetime64", scale="utc")
-
-    values = time_values.tolist()
-    if not isinstance(values, list):
-        values = [values]
-
-    if values and isinstance(values[0], datetime):
-        return Time(values, scale="utc")
-
-    return Time([str(value) for value in values], format="isot", scale="utc")
-
-
-def _as_datetime_array(time_utc: Any) -> np.ndarray:
-    """Convert UTC timestamps to Python datetimes for pymap3d."""
-
-    times = _as_time_array(time_utc)
-    return np.atleast_1d(times.to_datetime())
-
-
-def _as_position_array(r_m: Any, name: str) -> np.ndarray:
-    """Convert position values to a float64 array with shape (N, 3)."""
-
-    array = np.asarray(r_m, dtype=np.float64)
-
-    if array.ndim != 2 or array.shape[1] != 3:
-        raise ValueError(f"{name} must have shape (N, 3).")
-
-    return array
-
-
-def _as_vector_array(vectors: Any, name: str) -> np.ndarray:
-    """Convert vector values to a float64 array with shape (N, 3)."""
-
-    array = np.asarray(vectors, dtype=np.float64)
-
-    if array.ndim != 2 or array.shape[1] != 3:
-        raise ValueError(f"{name} must have shape (N, 3).")
-
-    return array
-
-
-def _check_vector_inputs(vectors: np.ndarray, lat_deg: np.ndarray, lon_deg: np.ndarray) -> None:
-    """Validate vector and coordinate array shapes."""
-
-    if vectors.ndim != 2 or vectors.shape[1] != 3:
-        raise ValueError("vectors must have shape (N, 3).")
+    if lat_deg.ndim != 1 or lon_deg.ndim != 1:
+        raise ValueError("Latitude and longitude arrays must be one-dimensional.")
 
     if lat_deg.shape != lon_deg.shape or lat_deg.shape[0] != vectors.shape[0]:
         raise ValueError("Latitude and longitude arrays must match vector length.")
@@ -121,8 +59,8 @@ def eci_to_ecef_positions(r_eci_m: np.ndarray, time_utc: Any) -> np.ndarray:
         Position vectors in ECEF [m], shape (N, 3).
     """
 
-    r_eci_m = _as_position_array(r_eci_m, "r_eci_m")
-    times = _as_datetime_array(time_utc)
+    r_eci_m = as_float_vector_array(r_eci_m, "r_eci_m")
+    times = as_datetime_array(time_utc)
 
     if len(times) != len(r_eci_m):
         raise ValueError("time_utc must have the same length as r_eci_m.")
@@ -147,7 +85,7 @@ def ecef_to_geodetic(r_ecef_m: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.n
     Returns latitude and longitude in degrees, altitude in meters.
     """
 
-    r_ecef_m = _as_position_array(r_ecef_m, "r_ecef_m")
+    r_ecef_m = as_float_vector_array(r_ecef_m, "r_ecef_m")
 
     lat_deg, lon_deg, alt_m = pm.ecef2geodetic(
         r_ecef_m[:, 0], r_ecef_m[:, 1], r_ecef_m[:, 2], deg=True
@@ -188,11 +126,9 @@ def ned_to_ecef_vectors(b_ned: np.ndarray, lat_deg: np.ndarray, lon_deg: np.ndar
         Vectors in ECEF coordinates, shape (N, 3).
     """
 
-    b_ned = np.asarray(b_ned, dtype=np.float64)
-    lat_deg = np.asarray(lat_deg, dtype=np.float64)
-    lon_deg = np.asarray(lon_deg, dtype=np.float64)
+    b_ned = as_float_vector_array(b_ned, "b_ned")
 
-    _check_vector_inputs(b_ned, lat_deg, lon_deg)
+    _check_coordinate_inputs(b_ned, lat_deg, lon_deg)
 
     x_ecef, y_ecef, z_ecef = pm.enu2ecefv(
         b_ned[:, 1], b_ned[:, 0], -b_ned[:, 2], lat_deg, lon_deg, deg=True
@@ -206,8 +142,8 @@ def eci_vectors_to_ecef(vectors_eci: np.ndarray, time_utc: Any) -> np.ndarray:
     Convert free vectors from ECI coordinates to ECEF coordinates via pymap3d.
     """
 
-    vectors_eci = _as_vector_array(vectors_eci, "vectors_eci")
-    times = _as_datetime_array(time_utc)
+    vectors_eci = as_float_vector_array(vectors_eci, "vectors_eci")
+    times = as_datetime_array(time_utc)
 
     if len(times) != len(vectors_eci):
         raise ValueError("time_utc must have the same length as vectors_eci.")
@@ -234,8 +170,8 @@ def ecef_vectors_to_eci(vectors_ecef: np.ndarray, time_utc: Any) -> np.ndarray:
     Convert free vectors from ECEF coordinates to ECI coordinates via pymap3d.
     """
 
-    vectors_ecef = _as_vector_array(vectors_ecef, "vectors_ecef")
-    times = _as_datetime_array(time_utc)
+    vectors_ecef = as_float_vector_array(vectors_ecef, "vectors_ecef")
+    times = as_datetime_array(time_utc)
 
     if len(times) != len(vectors_ecef):
         raise ValueError("time_utc must have the same length as vectors_ecef.")

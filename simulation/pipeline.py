@@ -4,6 +4,8 @@ Main simulation pipeline orchestration.
 
 from pathlib import Path
 
+import numpy as np
+
 from simulation.config import (
     create_default_attitude_config,
     create_default_orbit,
@@ -18,6 +20,7 @@ from simulation.plots import (
     plot_magnetic_field_body_norm,
     plot_magnetic_field_eci,
     plot_magnetic_field_norm,
+    plot_magnetometer_measurement,
     plot_orbit_3d,
     plot_position_eci,
     plot_position_norm,
@@ -26,6 +29,7 @@ from simulation.plots import (
 )
 from simulation.results import build_results_dataframe, print_sanity_check, save_results
 from simulation.runner import SimulationRunner
+from simulation.sensors import MagnetometerModel
 
 
 def run_orbit_pipeline(output_dir: Path) -> None:
@@ -35,7 +39,11 @@ def run_orbit_pipeline(output_dir: Path) -> None:
     simulation_config = create_default_simulation_config()
     attitude_config = create_default_attitude_config()
 
-    runner = SimulationRunner()
+    runner = SimulationRunner(
+        magnetometer_model=MagnetometerModel(
+            bias_body_t=np.array([0.3e-6, -0.2e-6, 0.1e-6]), noise_std_t=1.0e-6, seed=42
+        )
+    )
     result = runner.run(elements, simulation_config, attitude_config)
     df = build_results_dataframe(result)
 
@@ -50,6 +58,7 @@ def run_orbit_pipeline(output_dir: Path) -> None:
     plot_magnetic_field_norm(df, output_dir)
     plot_magnetic_field_body(df, output_dir)
     plot_magnetic_field_body_norm(df, output_dir)
+    plot_magnetometer_measurement(df, output_dir)
     plot_attitude_orientation(df, output_dir)
     plot_attitude_quaternion(df, output_dir)
     plot_angular_velocity_body(df, output_dir)
@@ -65,6 +74,7 @@ def run_orbit_pipeline(output_dir: Path) -> None:
     print(f"Saved plot: {output_dir / 'magnetic_field_norm.png'}")
     print(f"Saved plot: {output_dir / 'magnetic_field_body.png'}")
     print(f"Saved plot: {output_dir / 'magnetic_field_body_norm.png'}")
+    print(f"Saved plot: {output_dir / 'magnetometer_measurement.png'}")
     print(f"Saved plot: {output_dir / 'attitude_orientation.png'}")
     print(f"Saved plot: {output_dir / 'attitude_quaternion.png'}")
     print(f"Saved plot: {output_dir / 'angular_velocity_body.png'}")
