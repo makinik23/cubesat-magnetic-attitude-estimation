@@ -53,4 +53,4 @@ class MagnetometerModel(Magnetometer):
         b_body_t = as_float_vector_array(b_body_t, "b_body_t", finite=True)
         noise_t = self._rng.normal(loc=0.0, scale=self.noise_std_t, size=b_body_t.shape)
 
-        return np.asarray(b_body_t + self.bias_body_t + noise_t, dtype=np.float64)
+        return b_body_t + self.bias_body_t + noise_t

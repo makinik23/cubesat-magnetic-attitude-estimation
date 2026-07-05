@@ -127,8 +127,6 @@ def ned_to_ecef_vectors(b_ned: np.ndarray, lat_deg: np.ndarray, lon_deg: np.ndar
     """
 
     b_ned = as_float_vector_array(b_ned, "b_ned")
-    lat_deg = np.asarray(lat_deg, dtype=np.float64)
-    lon_deg = np.asarray(lon_deg, dtype=np.float64)
 
     _check_coordinate_inputs(b_ned, lat_deg, lon_deg)
 

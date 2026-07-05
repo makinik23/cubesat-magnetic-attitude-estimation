@@ -131,6 +131,7 @@ lat, lon, h, t -> IGRF -> B_ned
 B_ned -> B_ecef
 B_ecef -> B_eci
 B_eci -> B_body
+B_body -> B_magnetometer
 ```
 
 The body-frame field is:
@@ -146,3 +147,7 @@ The norm is invariant under a valid rotation:
 ```
 
 Small differences can appear only from floating-point roundoff.
+
+The magnetometer stage is not another geomagnetic-field model. It uses
+`B_body` as the ideal body-frame field and applies the configured sensor bias
+and Gaussian noise.

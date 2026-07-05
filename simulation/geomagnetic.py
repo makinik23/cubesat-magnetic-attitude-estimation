@@ -30,9 +30,6 @@ def compute_igrf_ned_nt(
         Magnetic-field vectors [nT] in NED coordinates, shape (N, 3).
     """
 
-    lat_deg = np.asarray(lat_deg, dtype=np.float64)
-    lon_deg = np.asarray(lon_deg, dtype=np.float64)
-    alt_m = np.asarray(alt_m, dtype=np.float64)
     times = as_time_array(time_utc)
 
     if lat_deg.ndim != 1 or lon_deg.ndim != 1 or alt_m.ndim != 1:

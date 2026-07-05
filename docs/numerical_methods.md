@@ -59,3 +59,5 @@ det(R)                        should be 1
 - ECI vectors from `poliastro` are treated as GCRS-like for this milestone.
 - The ECEF-to-ECI vector rotation is estimated locally using displaced points.
 - The attitude model uses a constant body-frame torque, zero by default.
+- The default magnetometer has zero bias and zero noise unless a configured
+  `MagnetometerModel` is injected into the simulation runner.
