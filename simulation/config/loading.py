@@ -16,7 +16,7 @@ from simulation.types import (
     SimulationConfig,
 )
 
-DEFAULT_SETTINGS_DIR = Path(__file__).resolve().parent / "settings"
+DEFAULT_SETTINGS_DIR = Path(__file__).resolve().parent.parent / "settings"
 DEFAULT_ORBIT_CONFIG_PATH = DEFAULT_SETTINGS_DIR / "orbit.yaml"
 DEFAULT_SATELLITE_CONFIG_PATH = DEFAULT_SETTINGS_DIR / "satellite.yaml"
 

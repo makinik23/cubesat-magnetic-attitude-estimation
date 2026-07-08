@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from simulation.attitude import RotationBodyFieldProjector, SolveIvpAttitudePropagator
 from simulation.frames import Pymap3dFrameTransformer
-from simulation.geomagnetic import IgrfMagneticFieldModel
+from simulation.magnetic import IgrfMagneticFieldModel
 from simulation.interfaces import (
     AttitudePropagator,
     BodyFieldProjector,
@@ -15,7 +15,7 @@ from simulation.interfaces import (
     MagneticFieldModel,
     OrbitPropagator,
 )
-from simulation.orbit_provider import PoliastroKeplerPropagator
+from simulation.orbit import PoliastroKeplerPropagator
 from simulation.sensors import MagnetometerModel
 from simulation.types import (
     AttitudeConfig,

@@ -91,7 +91,7 @@ deviation:
 ```python
 import numpy as np
 
-from simulation.runner import SimulationRunner
+from simulation.pipeline import SimulationRunner
 from simulation.sensors import MagnetometerModel
 
 runner = SimulationRunner(

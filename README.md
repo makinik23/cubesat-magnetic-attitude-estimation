@@ -15,16 +15,18 @@ attitude motion.
 ## Project Layout
 
 - `main.py` - entry point.
-- `simulation/config.py` - configuration loading and validation.
+- `simulation/config/` - configuration loading and validation.
 - `simulation/types.py` - shared configuration and state dataclasses.
 - `simulation/interfaces.py` - strategy contracts for replaceable components.
-- `simulation/runner.py` - end-to-end simulation orchestration.
-- `simulation/orbit_provider.py` - poliastro orbit propagation adapter.
-- `simulation/frames.py` - Astropy/pymap3d frame transformations.
-- `simulation/geomagnetic.py` - ppigrf IGRF magnetic-field adapter.
-- `simulation/attitude.py` - solve_ivp quaternion attitude dynamics.
-- `simulation/results.py` - result table assembly, CSV export, and sanity checks.
-- `simulation/plots.py` - plots and GIF animation.
+- `simulation/pipeline/` - end-to-end simulation orchestration.
+- `simulation/orbit/` - poliastro orbit propagation adapter.
+- `simulation/frames/` - Astropy/pymap3d frame transformations.
+- `simulation/magnetic/` - ppigrf IGRF magnetic-field adapter.
+- `simulation/attitude/` - rotations, body projection, and solve_ivp attitude dynamics.
+- `simulation/sensors/` - magnetometer measurement models.
+- `simulation/estimation/` - reserved for future attitude estimators.
+- `simulation/io/` - result table assembly, CSV export, and sanity checks.
+- `simulation/visualization/` - plots and GIF animation.
 - `simulation/settings/` - YAML input files for orbit and satellite parameters.
 - `docs/` - concise mathematical notes.
 - `outputs/` - generated CSV, plots, and animation.

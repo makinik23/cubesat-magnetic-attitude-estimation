@@ -13,7 +13,7 @@ from simulation.config import (
     create_default_orbit,
     create_default_simulation_config,
 )
-from simulation.plots import (
+from simulation.visualization import (
     animate_attitude_cube,
     plot_angular_velocity_body,
     plot_attitude_orientation,
@@ -29,8 +29,8 @@ from simulation.plots import (
     plot_r_eci_time,
     plot_velocity_norm,
 )
-from simulation.results import build_results_dataframe, print_sanity_check, save_results
-from simulation.runner import SimulationRunner
+from simulation.io import build_results_dataframe, print_sanity_check, save_results
+from simulation.pipeline.runner import SimulationRunner
 from simulation.sensors import MagnetometerModel
 from simulation.types import AttitudeConfig, ClassicalOrbitalElements, SimulationConfig
 

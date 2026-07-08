@@ -12,7 +12,7 @@ import numpy as np
 from astropy.time import Time
 
 from simulation.frames import Pymap3dFrameTransformer
-from simulation.geomagnetic import IgrfMagneticFieldModel, compute_igrf_ned_nt
+from simulation.magnetic import IgrfMagneticFieldModel, compute_igrf_ned_nt
 from simulation.types import OrbitState
 
 REFERENCE_DATA_PATH = Path(__file__).parent / "data" / "magnetic_injections.json"
