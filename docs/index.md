@@ -2,6 +2,17 @@
 
 These notes summarize the mechanics used in the simulation.
 
+Mathematical expressions use MathJax/KaTeX-style Markdown:
+
+- inline math: `$x = y$`,
+- display math:
+
+```text
+$$
+x = y
+$$
+```
+
 Read in this order:
 
 1. [Orbital mechanics](orbital_mechanics.md)
@@ -15,7 +26,7 @@ Main conventions:
 
 - Vectors are column vectors.
 - Rotation matrices are named `R_target_from_source`.
-- Quaternions are scalar-first: `[w, x, y, z]`.
+- Quaternions are scalar-first: $\mathbf{q} = [q_w, q_x, q_y, q_z]^\mathsf{T}$.
 - SI units are used internally unless a column name says otherwise.
 - Magnetic field is stored in tesla for vectors and nT for IGRF NED components.
 - Magnetometer output is the body-frame field plus configured bias and

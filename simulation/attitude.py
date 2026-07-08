@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.integrate import solve_ivp
 
-from simulation.helpers import as_float_vector_array, normalize_quaternion
+from simulation.helpers import normalize_quaternion
 from simulation.types import ArrayFloat64, AttitudeConfig, AttitudeState
 
 
@@ -53,11 +53,7 @@ def rotation_matrix_to_quaternion(rotation_matrix: ArrayFloat64) -> ArrayFloat64
     Convert a rotation matrix to a scalar-first quaternion.
     """
 
-    matrix = np.asarray(rotation_matrix, dtype=np.float64)
-
-    if matrix.shape != (3, 3):
-        raise ValueError("rotation_matrix must have shape (3, 3).")
-
+    matrix = rotation_matrix
     trace = np.trace(matrix)
 
     if trace > 0.0:
@@ -121,11 +117,7 @@ def rotation_matrix_to_zyx_euler(rotation_matrix: ArrayFloat64) -> ArrayFloat64:
     Convert an ECI-from-body rotation matrix to ZYX yaw, pitch and roll angles.
     """
 
-    matrix = np.asarray(rotation_matrix, dtype=np.float64)
-
-    if matrix.shape != (3, 3):
-        raise ValueError("rotation_matrix must have shape (3, 3).")
-
+    matrix = rotation_matrix
     pitch = np.arcsin(np.clip(-matrix[2, 0], -1.0, 1.0))
     cos_pitch = np.cos(pitch)
 
@@ -144,7 +136,7 @@ def rigid_body_derivative(
     omega_body_radps: ArrayFloat64,
     inertia_kg_m2: ArrayFloat64,
     torque_body_nm: ArrayFloat64,
-) -> tuple[ArrayFloat64, ArrayFloat64]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute quaternion and angular-velocity derivatives.
 
@@ -156,11 +148,8 @@ def rigid_body_derivative(
     quaternion_dot = 0.5 * quaternion_multiply(quaternion_eci_from_body, omega_quaternion)
 
     angular_momentum_body = inertia_kg_m2 @ omega_body_radps
-    omega_dot_body = np.asarray(
-        np.linalg.solve(
-            inertia_kg_m2, torque_body_nm - np.cross(omega_body_radps, angular_momentum_body)
-        ),
-        dtype=np.float64,
+    omega_dot_body = np.linalg.solve(
+        inertia_kg_m2, torque_body_nm - np.cross(omega_body_radps, angular_momentum_body)
     )
 
     return quaternion_dot, omega_dot_body
@@ -185,22 +174,8 @@ def propagate_attitude(times_s: ArrayFloat64, config: AttitudeConfig) -> Attitud
     Propagate torque-free rigid-body attitude over the simulation time grid.
     """
 
-    times_s = np.asarray(times_s, dtype=np.float64)
-
-    if times_s.ndim != 1:
-        raise ValueError("times_s must be a one-dimensional array.")
-
-    if len(times_s) == 0:
-        raise ValueError("times_s must not be empty.")
-
-    if len(times_s) > 1 and np.any(np.diff(times_s) <= 0.0):
-        raise ValueError("times_s must be strictly increasing.")
-
     initial_state = np.concatenate(
-        (
-            config.initial_quaternion_eci_from_body,
-            np.asarray(config.initial_omega_body_radps, dtype=np.float64),
-        )
+        (config.initial_quaternion_eci_from_body, config.initial_omega_body_radps)
     )
 
     if len(times_s) == 1:
@@ -219,7 +194,7 @@ def propagate_attitude(times_s: ArrayFloat64, config: AttitudeConfig) -> Attitud
         if not solution.success:
             raise RuntimeError(f"Attitude integration failed: {solution.message}")
 
-        states = np.asarray(solution.y.T, dtype=np.float64)
+        states = solution.y.T
 
     quaternions = states[:, :4]
     quaternion_norms = np.linalg.norm(quaternions, axis=1)
@@ -252,11 +227,6 @@ def propagate_attitude(times_s: ArrayFloat64, config: AttitudeConfig) -> Attitud
 
 def project_eci_vectors_to_body(vectors_eci: ArrayFloat64, attitude: AttitudeState) -> ArrayFloat64:
     """Project ECI-frame vectors into the spacecraft body frame."""
-
-    vectors_eci = as_float_vector_array(vectors_eci, "vectors_eci")
-
-    if vectors_eci.shape[0] != attitude.rotation_eci_from_body.shape[0]:
-        raise ValueError("vectors_eci and attitude state must have the same length.")
 
     rotation_body_from_eci = np.transpose(attitude.rotation_eci_from_body, axes=(0, 2, 1))
 

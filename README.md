@@ -55,7 +55,10 @@ Generated outputs:
 - `outputs/magnetic_field_norm.png`
 - `outputs/magnetic_field_body.png`
 - `outputs/magnetic_field_body_norm.png`
+- `outputs/magnetometer_measurement.png`
 - `outputs/attitude_orientation.png`
+- `outputs/attitude_quaternion.png`
+- `outputs/angular_velocity_body.png`
 - `outputs/attitude_cube.gif`
 
 ## Checks
@@ -77,7 +80,8 @@ unit tests on pushes and pull requests.
 
 ## Notes
 
-- Quaternions use scalar-first convention: `[w, x, y, z]`.
+- Quaternions use scalar-first convention: $\mathbf{q} = [q_w, q_x, q_y, q_z]^{\mathsf{T}}$.
 - Rotation matrices are named as `R_target_from_source`.
-- Body-frame magnetic field is computed as `B_body = R_eci_from_body.T @ B_eci`.
-- The CSV includes attitude sanity checks: `R^T R - I` and `det(R)`.
+- Body-frame magnetic field is computed as $\mathbf{B}_b = \mathbf{R}_{eb}^{\mathsf{T}}\mathbf{B}_e$, where $e$ is ECI and $b$ is body frame.
+- The CSV includes attitude sanity checks:
+  $\mathbf{R}^{\mathsf{T}}\mathbf{R} - \mathbf{I}$ and $\det(\mathbf{R})$.

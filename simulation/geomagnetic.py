@@ -18,6 +18,12 @@ from simulation.helpers import as_time_array
 from simulation.types import FrameState, MagneticFieldState, OrbitState
 
 
+def _first_value(value: Any) -> float:
+    """Return the scalar value from a ppigrf component."""
+
+    return float(np.ravel(value)[0])
+
+
 def compute_igrf_ned_nt(
     lat_deg: np.ndarray, lon_deg: np.ndarray, alt_m: np.ndarray, time_utc: Any
 ) -> np.ndarray:
@@ -32,15 +38,6 @@ def compute_igrf_ned_nt(
 
     times = as_time_array(time_utc)
 
-    if lat_deg.ndim != 1 or lon_deg.ndim != 1 or alt_m.ndim != 1:
-        raise ValueError("lat_deg, lon_deg and alt_m must be one-dimensional arrays.")
-
-    if lat_deg.shape != lon_deg.shape or lat_deg.shape != alt_m.shape:
-        raise ValueError("lat_deg, lon_deg and alt_m must have the same length.")
-
-    if len(times) != len(lat_deg):
-        raise ValueError("time_utc must have the same length as lat_deg, lon_deg and alt_m.")
-
     b_ned_nt = np.empty((len(lat_deg), 3), dtype=float)
 
     for idx, (lat, lon, alt, time) in enumerate(zip(lat_deg, lon_deg, alt_m, times)):
@@ -50,13 +47,7 @@ def compute_igrf_ned_nt(
         # ppigrf.igrf returns east, north and up components in nT.
         b_east_nt, b_north_nt, b_up_nt = ppigrf.igrf(lon, lat, alt_km, date)
 
-        b_ned_nt[idx] = np.array(
-            [
-                float(np.asarray(b_north_nt).reshape(-1)[0]),
-                float(np.asarray(b_east_nt).reshape(-1)[0]),
-                -float(np.asarray(b_up_nt).reshape(-1)[0]),
-            ]
-        )
+        b_ned_nt[idx] = [_first_value(b_north_nt), _first_value(b_east_nt), -_first_value(b_up_nt)]
 
     return b_ned_nt
 

@@ -1,4 +1,4 @@
-"""Tests for shared conversion and validation helpers."""
+"""Tests for shared simulation helpers."""
 
 from __future__ import annotations
 
@@ -7,25 +7,11 @@ import unittest
 import numpy as np
 from astropy.time import Time
 
-from simulation.helpers import as_float_vector_array, as_time_array, normalize_quaternion
+from simulation.helpers import as_time_array, normalize_quaternion
 
 
 class HelperTests(unittest.TestCase):
     """Check shared helper contracts used across simulation modules."""
-
-    def test_as_float_vector_array_casts_valid_input(self) -> None:
-        vectors = as_float_vector_array([[1, 2, 3], [4, 5, 6]], "vectors")
-
-        self.assertEqual(vectors.dtype, np.float64)
-        np.testing.assert_allclose(vectors, np.array([[1, 2, 3], [4, 5, 6]], dtype=np.float64))
-
-    def test_as_float_vector_array_rejects_invalid_shape(self) -> None:
-        with self.assertRaisesRegex(ValueError, "vectors must have shape"):
-            as_float_vector_array(np.zeros(3, dtype=np.float64), "vectors")
-
-    def test_as_float_vector_array_can_require_finite_values(self) -> None:
-        with self.assertRaisesRegex(ValueError, "vectors must contain only finite values"):
-            as_float_vector_array([[1.0, np.nan, 3.0]], "vectors", finite=True)
 
     def test_as_time_array_wraps_scalar_time(self) -> None:
         times = as_time_array(Time("2026-01-01T00:00:00.000", scale="utc"))

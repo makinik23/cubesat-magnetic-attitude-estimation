@@ -10,7 +10,7 @@ from simulation.sensors import MagnetometerModel
 
 
 class MagnetometerModelTests(unittest.TestCase):
-    """Check bias, Gaussian noise and input validation."""
+    """Check bias and Gaussian noise behavior."""
 
     def test_measure_adds_bias_without_noise(self) -> None:
         b_body_t = np.array([[20e-6, -5e-6, 30e-6], [21e-6, -4e-6, 29e-6]], dtype=np.float64)
@@ -37,23 +37,6 @@ class MagnetometerModelTests(unittest.TestCase):
         measurement = model.measure(b_body_t)
 
         self.assertEqual(measurement.shape, b_body_t.shape)
-
-    def test_rejects_invalid_bias_shape(self) -> None:
-        with self.assertRaisesRegex(ValueError, "bias_body_t must have shape"):
-            MagnetometerModel(bias_body_t=np.zeros((1, 3), dtype=np.float64))
-
-    def test_rejects_invalid_noise_std(self) -> None:
-        with self.assertRaisesRegex(ValueError, "noise_std_t must be non-negative"):
-            MagnetometerModel(noise_std_t=-1.0)
-
-        with self.assertRaisesRegex(ValueError, "noise_std_t must be a scalar"):
-            MagnetometerModel(noise_std_t=np.ones((1, 3), dtype=np.float64))
-
-    def test_rejects_invalid_measurement_input_shape(self) -> None:
-        model = MagnetometerModel()
-
-        with self.assertRaisesRegex(ValueError, "b_body_t must have shape"):
-            model.measure(np.zeros(3, dtype=np.float64))
 
 
 if __name__ == "__main__":

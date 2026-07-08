@@ -6,12 +6,12 @@ The geomagnetic field is computed with IGRF through `ppigrf`.
 
 Inputs:
 
-```text
-latitude  [deg]
-longitude [deg]
-altitude  [km]
-date      [UTC]
-```
+| Quantity | Unit |
+| --- | --- |
+| latitude | deg |
+| longitude | deg |
+| altitude | km |
+| date | UTC |
 
 IGRF models the main internal magnetic field of Earth. It represents the field
 as the gradient of a scalar magnetic potential expanded in spherical harmonics.
@@ -20,107 +20,133 @@ as the gradient of a scalar magnetic potential expanded in spherical harmonics.
 
 Outside the source region, the magnetic field is written as:
 
-```text
-B = -grad(V)
-```
+$$
+\mathbf{B} = -\nabla V
+$$
 
 The IGRF internal scalar potential is:
 
-```text
-V(r, theta, lambda, t)
-  = a * sum_{n=1}^{N} sum_{m=0}^{n}
-      (a / r)^(n+1)
-      [g_n^m(t) cos(m lambda) + h_n^m(t) sin(m lambda)]
-      P_n^m(cos theta)
-```
+$$
+V(r,\theta,\lambda,t)
+= a
+  \sum_{n=1}^{N}
+  \sum_{m=0}^{n}
+  \left(\frac{a}{r}\right)^{n+1}
+  \left[
+    g_n^m(t)\cos(m\lambda)
+    + h_n^m(t)\sin(m\lambda)
+  \right]
+  P_n^m(\cos\theta)
+$$
 
 where:
 
-- `r` is geocentric radius,
-- `theta` is geocentric colatitude,
-- `lambda` is longitude,
-- `a` is the IGRF reference Earth radius,
-- `N` is the maximum model degree,
-- `P_n^m` are Schmidt semi-normalized associated Legendre functions,
-- `g_n^m(t)`, `h_n^m(t)` are Gauss coefficients.
+- $r$ is geocentric radius,
+- $\theta$ is geocentric colatitude,
+- $\lambda$ is longitude,
+- $a$ is the IGRF reference Earth radius,
+- $N$ is the maximum model degree,
+- $P_n^m$ are Schmidt semi-normalized associated Legendre functions,
+- $g_n^m(t)$ and $h_n^m(t)$ are Gauss coefficients.
 
 For IGRF-14, the maximum degree is:
 
-```text
+$$
 N = 13
-```
+$$
 
 ## Gauss Coefficients
 
-The coefficients:
-
-```text
-g_n^m(t), h_n^m(t)
-```
-
-describe the Earth's main magnetic field at a given epoch.
+The coefficients $g_n^m(t)$ and $h_n^m(t)$ describe the Earth's main magnetic
+field at a given epoch.
 
 Between tabulated epochs, coefficients are time-interpolated. For near-future
 dates, secular variation coefficients are used:
 
-```text
-g_n^m(t) ~= g_n^m(t0) + (t - t0) * gdot_n^m
-h_n^m(t) ~= h_n^m(t0) + (t - t0) * hdot_n^m
-```
+$$
+g_n^m(t)
+\approx g_n^m(t_0) + (t - t_0)\dot{g}_n^m
+$$
+
+$$
+h_n^m(t)
+\approx h_n^m(t_0) + (t - t_0)\dot{h}_n^m
+$$
 
 ## Magnetic Field Components
 
 Using spherical coordinates, the components follow from the potential:
 
-```text
-B_r      = -dV/dr
-B_theta  = -(1/r) dV/dtheta
-B_lambda = -(1/(r sin theta)) dV/dlambda
-```
+$$
+B_r = -\frac{\partial V}{\partial r}
+$$
+
+$$
+B_\theta = -\frac{1}{r}\frac{\partial V}{\partial \theta}
+$$
+
+$$
+B_\lambda
+= -\frac{1}{r\sin\theta}\frac{\partial V}{\partial \lambda}
+$$
 
 These are then converted to local geodetic components.
 
 In local navigation notation:
 
-```text
-B_N  north component
-B_E  east component
-B_D  down component
-```
+| Symbol | Meaning |
+| --- | --- |
+| $B_N$ | north component |
+| $B_E$ | east component |
+| $B_D$ | down component |
 
 The relation to spherical components is convention-dependent because IGRF
 starts from geocentric coordinates, while the code requests geodetic output
 from `ppigrf`.
 
-The useful project-level convention is simply:
+The useful project-level convention is:
 
-```text
-B_ned = [B_N, B_E, B_D]
-```
+$$
+\mathbf{B}_\mathrm{ned}
+=
+\begin{bmatrix}
+B_N & B_E & B_D
+\end{bmatrix}^\mathsf{T}
+$$
 
 ## ppigrf Output Convention
 
 `ppigrf.igrf` returns:
 
-```text
-B_east, B_north, B_up
-```
+$$
+(B_\mathrm{east}, B_\mathrm{north}, B_\mathrm{up})
+$$
 
 in nanotesla.
 
 The simulation stores local NED components:
 
-```text
-B_N =  B_north
-B_E =  B_east
-B_D = -B_up
-```
+$$
+B_N = B_\mathrm{north}
+$$
+
+$$
+B_E = B_\mathrm{east}
+$$
+
+$$
+B_D = -B_\mathrm{up}
+$$
 
 So:
 
-```text
-B_ned = [B_N, B_E, B_D]
-```
+$$
+\mathbf{B}_\mathrm{ned}
+=
+\begin{bmatrix}
+B_N & B_E & B_D
+\end{bmatrix}^\mathsf{T}
+$$
 
 ## Transformations
 
@@ -136,15 +162,19 @@ B_body -> B_magnetometer
 
 The body-frame field is:
 
-```text
-B_body = R_eci_from_body^T * B_eci
-```
+$$
+\mathbf{B}_\mathrm{body}
+= \mathbf{R}_{\mathrm{eci}\leftarrow\mathrm{body}}^\mathsf{T}\,
+  \mathbf{B}_\mathrm{eci}
+$$
 
 The norm is invariant under a valid rotation:
 
-```text
-||B_body|| = ||B_eci||
-```
+$$
+\lVert \mathbf{B}_\mathrm{body} \rVert
+=
+\lVert \mathbf{B}_\mathrm{eci} \rVert
+$$
 
 Small differences can appear only from floating-point roundoff.
 
