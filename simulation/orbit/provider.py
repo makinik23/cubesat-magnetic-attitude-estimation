@@ -100,16 +100,11 @@ def propagate_orbit(elements: ClassicalOrbitalElements, config: SimulationConfig
         r_eci_list.append(r_eci_m)
         v_eci_list.append(v_eci_mps)
 
-    r_eci = np.asarray(r_eci_list)
-    v_eci = np.asarray(v_eci_list)
+    r_eci = np.array(r_eci_list)
+    v_eci = np.array(v_eci_list)
     times_utc = elements.epoch + times_s * u.s
 
-    return OrbitState(
-        t_s=np.asarray(times_s, dtype=np.float64),
-        t_utc=times_utc,
-        r_eci_m=np.asarray(r_eci, dtype=np.float64),
-        v_eci_mps=np.asarray(v_eci, dtype=np.float64),
-    )
+    return OrbitState(t_s=times_s, t_utc=times_utc, r_eci_m=r_eci, v_eci_mps=v_eci)
 
 
 class PoliastroKeplerPropagator:

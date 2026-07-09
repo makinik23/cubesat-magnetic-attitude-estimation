@@ -8,7 +8,7 @@ import astropy.units as u
 import numpy as np
 from astropy.time import Time
 
-from simulation.runner import SimulationRunner
+from simulation.pipeline import SimulationRunner
 from simulation.types import (
     AttitudeConfig,
     AttitudeState,

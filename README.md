@@ -15,16 +15,18 @@ attitude motion.
 ## Project Layout
 
 - `main.py` - entry point.
-- `simulation/config.py` - configuration loading and validation.
+- `simulation/config/` - configuration loading and validation.
 - `simulation/types.py` - shared configuration and state dataclasses.
 - `simulation/interfaces.py` - strategy contracts for replaceable components.
-- `simulation/runner.py` - end-to-end simulation orchestration.
-- `simulation/orbit_provider.py` - poliastro orbit propagation adapter.
-- `simulation/frames.py` - Astropy/pymap3d frame transformations.
-- `simulation/geomagnetic.py` - ppigrf IGRF magnetic-field adapter.
-- `simulation/attitude.py` - solve_ivp quaternion attitude dynamics.
-- `simulation/results.py` - result table assembly, CSV export, and sanity checks.
-- `simulation/plots.py` - plots and GIF animation.
+- `simulation/pipeline/` - end-to-end simulation orchestration.
+- `simulation/orbit/` - poliastro orbit propagation adapter.
+- `simulation/frames/` - Astropy/pymap3d frame transformations.
+- `simulation/magnetic/` - ppigrf IGRF magnetic-field adapter.
+- `simulation/attitude/` - rotations, body projection, and solve_ivp attitude dynamics.
+- `simulation/sensors/` - magnetometer measurement models.
+- `simulation/estimation/` - reserved for future attitude estimators.
+- `simulation/io/` - result table assembly, CSV export, and sanity checks.
+- `simulation/visualization/` - plots and GIF animation.
 - `simulation/settings/` - YAML input files for orbit and satellite parameters.
 - `docs/` - concise mathematical notes.
 - `outputs/` - generated CSV, plots, and animation.
@@ -55,7 +57,10 @@ Generated outputs:
 - `outputs/magnetic_field_norm.png`
 - `outputs/magnetic_field_body.png`
 - `outputs/magnetic_field_body_norm.png`
+- `outputs/magnetometer_measurement.png`
 - `outputs/attitude_orientation.png`
+- `outputs/attitude_quaternion.png`
+- `outputs/angular_velocity_body.png`
 - `outputs/attitude_cube.gif`
 
 ## Checks
@@ -77,7 +82,8 @@ unit tests on pushes and pull requests.
 
 ## Notes
 
-- Quaternions use scalar-first convention: `[w, x, y, z]`.
+- Quaternions use scalar-first convention: $\mathbf{q} = [q_w, q_x, q_y, q_z]^{\mathsf{T}}$.
 - Rotation matrices are named as `R_target_from_source`.
-- Body-frame magnetic field is computed as `B_body = R_eci_from_body.T @ B_eci`.
-- The CSV includes attitude sanity checks: `R^T R - I` and `det(R)`.
+- Body-frame magnetic field is computed as $\mathbf{B}_b = \mathbf{R}_{eb}^{\mathsf{T}}\mathbf{B}_e$, where $e$ is ECI and $b$ is body frame.
+- The CSV includes attitude sanity checks:
+  $\mathbf{R}^{\mathsf{T}}\mathbf{R} - \mathbf{I}$ and $\det(\mathbf{R})$.

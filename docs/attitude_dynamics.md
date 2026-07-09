@@ -6,75 +6,105 @@ The body frame is attached to the spacecraft.
 
 Initial body axes are defined from the first orbit sample:
 
-```text
-x_body(0) = r_eci / ||r_eci||
-z_body(0) = (r_eci x v_eci) / ||r_eci x v_eci||
-y_body(0) = z_body(0) x x_body(0)
-```
+$$
+\hat{\mathbf{x}}_\mathrm{body}(0)
+= \frac{\mathbf{r}_\mathrm{eci}}{\lVert \mathbf{r}_\mathrm{eci} \rVert}
+$$
+
+$$
+\hat{\mathbf{z}}_\mathrm{body}(0)
+= \frac{\mathbf{r}_\mathrm{eci} \times \mathbf{v}_\mathrm{eci}}
+       {\lVert \mathbf{r}_\mathrm{eci} \times \mathbf{v}_\mathrm{eci} \rVert}
+$$
+
+$$
+\hat{\mathbf{y}}_\mathrm{body}(0)
+= \hat{\mathbf{z}}_\mathrm{body}(0) \times \hat{\mathbf{x}}_\mathrm{body}(0)
+$$
 
 These axes form the initial rotation matrix:
 
-```text
-R_eci_from_body(0) = [x_body(0) y_body(0) z_body(0)]
-```
+$$
+\mathbf{R}_{\mathrm{eci}\leftarrow\mathrm{body}}(0)
+=
+\begin{bmatrix}
+\hat{\mathbf{x}}_\mathrm{body}(0) &
+\hat{\mathbf{y}}_\mathrm{body}(0) &
+\hat{\mathbf{z}}_\mathrm{body}(0)
+\end{bmatrix}
+$$
 
-After `t = 0`, the body frame is propagated by rigid-body dynamics.
+After $t = 0$, the body frame is propagated by rigid-body dynamics.
 
 ## Quaternion Convention
 
 Quaternions are scalar-first:
 
-```text
-q = [w, x, y, z]
-```
+$$
+\mathbf{q} = \begin{bmatrix} q_w & q_x & q_y & q_z \end{bmatrix}^\mathsf{T}
+$$
 
 The quaternion maps body vectors to ECI through:
 
-```text
-v_eci = R_eci_from_body(q) * v_body
-```
+$$
+\mathbf{v}_\mathrm{eci}
+= \mathbf{R}_{\mathrm{eci}\leftarrow\mathrm{body}}(\mathbf{q})\,
+  \mathbf{v}_\mathrm{body}
+$$
 
 Therefore:
 
-```text
-v_body = R_eci_from_body(q)^T * v_eci
-```
+$$
+\mathbf{v}_\mathrm{body}
+= \mathbf{R}_{\mathrm{eci}\leftarrow\mathrm{body}}(\mathbf{q})^\mathsf{T}\,
+  \mathbf{v}_\mathrm{eci}
+$$
+
+In code, this rotation is named `rotation_eci_from_body`.
 
 ## Quaternion Kinematics
 
 Angular velocity is expressed in body coordinates:
 
-```text
-omega_body = [omega_x, omega_y, omega_z]
-```
+$$
+\boldsymbol{\omega}_\mathrm{body}
+= \begin{bmatrix} \omega_x & \omega_y & \omega_z \end{bmatrix}^\mathsf{T}
+$$
 
 The quaternion equation is:
 
-```text
-q_dot = 1/2 * q (*) [0, omega_body]
-```
+$$
+\dot{\mathbf{q}}
+= \frac{1}{2}\,\mathbf{q} \otimes
+  \begin{bmatrix} 0 & \boldsymbol{\omega}_\mathrm{body}^\mathsf{T} \end{bmatrix}^\mathsf{T}
+$$
 
-where `(*)` is quaternion multiplication.
+where $\otimes$ is quaternion multiplication.
 
 ## Euler Rigid-Body Equation
 
 The rotational dynamics are:
 
-```text
-I * omega_dot + omega x (I * omega) = tau
-```
+$$
+\mathbf{I}\dot{\boldsymbol{\omega}}
++ \boldsymbol{\omega} \times (\mathbf{I}\boldsymbol{\omega})
+= \boldsymbol{\tau}
+$$
 
 or:
 
-```text
-omega_dot = I^-1 * (tau - omega x (I * omega))
-```
+$$
+\dot{\boldsymbol{\omega}}
+= \mathbf{I}^{-1}
+  \left(\boldsymbol{\tau}
+  - \boldsymbol{\omega} \times (\mathbf{I}\boldsymbol{\omega})\right)
+$$
 
 Current default:
 
-```text
-tau = 0
-```
+$$
+\boldsymbol{\tau} = \mathbf{0}
+$$
 
 so the motion is torque-free.
 
@@ -82,20 +112,26 @@ so the motion is torque-free.
 
 For a valid rotation matrix:
 
-```text
-R^T R = I
-det(R) = 1
-```
+$$
+\mathbf{R}^\mathsf{T}\mathbf{R} = \mathbf{I}
+$$
+
+$$
+\det(\mathbf{R}) = 1
+$$
 
 The CSV stores:
 
-- all entries of `R^T R - I`,
-- Frobenius norm `||R^T R - I||_F`,
-- determinant `det(R)`.
+- all entries of $\mathbf{R}^\mathsf{T}\mathbf{R} - \mathbf{I}$,
+- Frobenius norm $\lVert \mathbf{R}^\mathsf{T}\mathbf{R} - \mathbf{I} \rVert_F$,
+- determinant $\det(\mathbf{R})$.
 
 These values should stay close to:
 
-```text
-R^T R - I = 0
-det(R) = 1
-```
+$$
+\mathbf{R}^\mathsf{T}\mathbf{R} - \mathbf{I} = \mathbf{0}
+$$
+
+$$
+\det(\mathbf{R}) = 1
+$$

@@ -8,7 +8,7 @@ import astropy.units as u
 import yaml
 from astropy.time import Time
 
-from simulation.helpers import as_float_matrix, as_float_vector, normalize_quaternion
+from simulation.helpers import normalize_quaternion
 from simulation.types import (
     AttitudeConfig,
     ArrayFloat64,
@@ -16,7 +16,7 @@ from simulation.types import (
     SimulationConfig,
 )
 
-DEFAULT_SETTINGS_DIR = Path(__file__).resolve().parent / "settings"
+DEFAULT_SETTINGS_DIR = Path(__file__).resolve().parent.parent / "settings"
 DEFAULT_ORBIT_CONFIG_PATH = DEFAULT_SETTINGS_DIR / "orbit.yaml"
 DEFAULT_SATELLITE_CONFIG_PATH = DEFAULT_SETTINGS_DIR / "satellite.yaml"
 
@@ -27,78 +27,41 @@ def load_yaml_file(path: Path) -> dict[str, Any]:
     """
 
     with path.open("r", encoding="utf-8") as file:
-        data = yaml.safe_load(file)
-
-    if data is None:
-        return {}
-
-    if not isinstance(data, dict):
-        raise ValueError(f"YAML file must contain a top-level mapping: {path}")
-
-    return data
+        return yaml.safe_load(file) or {}
 
 
 def _get_section(data: dict[str, Any], section_name: str) -> dict[str, Any]:
     """Return a named YAML section as a mapping."""
 
-    section = data.get(section_name)
-
-    if not isinstance(section, dict):
-        raise ValueError(f"Missing or invalid '{section_name}' section in YAML config.")
-
-    return section
+    return data[section_name]
 
 
 def _get_float(section: dict[str, Any], key: str) -> float:
     """Return a required numeric YAML value as float."""
 
-    value = section.get(key)
-
-    if not isinstance(value, int | float):
-        raise ValueError(f"Missing or invalid numeric value: {key}")
-
-    return float(value)
+    return float(section[key])
 
 
 def _get_string(section: dict[str, Any], key: str) -> str:
     """Return a required string YAML value."""
 
-    value = section.get(key)
-
-    if not isinstance(value, str):
-        raise ValueError(f"Missing or invalid string value: {key}")
-
-    return value
+    return section[key]
 
 
-def _get_vector(section: dict[str, Any], key: str, length: int = 3) -> ArrayFloat64:
+def _get_vector(section: dict[str, Any], key: str) -> ArrayFloat64:
     """Return a required numeric vector YAML value."""
 
-    value = section.get(key)
-
-    try:
-        return as_float_vector(value, key, length=length)
-    except ValueError as exc:
-        raise ValueError(f"Missing or invalid vector value: {key}") from exc
-    except TypeError as exc:
-        raise ValueError(f"Missing or invalid vector value: {key}") from exc
+    return np.array(section[key], dtype=float)
 
 
-def _get_matrix(section: dict[str, Any], key: str, shape: tuple[int, int] = (3, 3)) -> ArrayFloat64:
+def _get_matrix(section: dict[str, Any], key: str) -> ArrayFloat64:
     """Return a required numeric matrix YAML value."""
 
-    value = section.get(key)
-
-    try:
-        return as_float_matrix(value, key, shape=shape)
-    except ValueError as exc:
-        raise ValueError(f"Missing or invalid matrix value: {key}") from exc
-    except TypeError as exc:
-        raise ValueError(f"Missing or invalid matrix value: {key}") from exc
+    return np.array(section[key], dtype=float)
 
 
 def _validate_attitude_config(config: AttitudeConfig) -> None:
-    """Validate mass, inertia and quaternion values used by attitude dynamics."""
+    """Validate attitude dynamics settings."""
 
     if config.mass_kg <= 0.0:
         raise ValueError("Satellite mass must be positive.")
@@ -157,7 +120,7 @@ def create_attitude_config_from_yaml(path: Path = DEFAULT_SATELLITE_CONFIG_PATH)
         mass_kg=_get_float(satellite, "mass_kg"),
         inertia_kg_m2=_get_matrix(satellite, "inertia_kg_m2"),
         initial_quaternion_eci_from_body=normalize_quaternion(
-            _get_vector(attitude, "initial_quaternion_eci_from_body", length=4)
+            _get_vector(attitude, "initial_quaternion_eci_from_body")
         ),
         initial_omega_body_radps=np.deg2rad(_get_vector(attitude, "initial_omega_body_degps")),
         torque_body_nm=_get_vector(attitude, "torque_body_nm"),

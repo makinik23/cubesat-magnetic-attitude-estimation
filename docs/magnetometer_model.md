@@ -5,9 +5,11 @@
 The geomagnetic and attitude pipeline produces the ideal magnetic-field vector
 in spacecraft body coordinates:
 
-```text
-B_body = R_eci_from_body^T * B_eci
-```
+$$
+\mathbf{B}_\mathrm{body}
+= \mathbf{R}_{\mathrm{eci}\leftarrow\mathrm{body}}^\mathsf{T}\,
+  \mathbf{B}_\mathrm{eci}
+$$
 
 The magnetometer model turns this ideal body-frame vector into a sensor
 measurement. It does not recompute the magnetic field; it only adds a simple
@@ -15,35 +17,40 @@ sensor error model.
 
 ## Measurement Equation
 
-For each output sample:
+For each output sample $k$:
 
-```text
-B_magnetometer[k] = B_body[k] + bias_body + noise[k]
-```
+$$
+\mathbf{B}_{\mathrm{mag},k}
+= \mathbf{B}_{\mathrm{body},k}
+  + \mathbf{b}_\mathrm{body}
+  + \boldsymbol{\eta}_k
+$$
 
 where:
 
-- `B_body[k]` is the ideal body-frame magnetic field in tesla,
-- `bias_body` is a constant 3-axis bias in tesla,
-- `noise[k]` is zero-mean Gaussian noise in tesla.
+- $\mathbf{B}_{\mathrm{body},k}$ is the ideal body-frame magnetic field in tesla,
+- $\mathbf{b}_\mathrm{body}$ is a constant 3-axis bias in tesla,
+- $\boldsymbol{\eta}_k$ is zero-mean Gaussian noise in tesla.
 
 The noise model is:
 
-```text
-noise[k] ~ N(0, Sigma)
-```
+$$
+\boldsymbol{\eta}_k \sim \mathcal{N}(\mathbf{0}, \boldsymbol{\Sigma})
+$$
 
 For per-axis noise:
 
-```text
-Sigma = diag(sigma_x^2, sigma_y^2, sigma_z^2)
-```
+$$
+\boldsymbol{\Sigma}
+=
+\operatorname{diag}(\sigma_x^2,\sigma_y^2,\sigma_z^2)
+$$
 
 For scalar `noise_std_t = sigma`:
 
-```text
-Sigma = sigma^2 * I
-```
+$$
+\boldsymbol{\Sigma} = \sigma^2\mathbf{I}
+$$
 
 ## Implementation
 
@@ -84,7 +91,7 @@ deviation:
 ```python
 import numpy as np
 
-from simulation.runner import SimulationRunner
+from simulation.pipeline import SimulationRunner
 from simulation.sensors import MagnetometerModel
 
 runner = SimulationRunner(
