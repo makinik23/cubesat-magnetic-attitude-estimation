@@ -266,6 +266,95 @@ def plot_attitude_quaternion(df: pd.DataFrame, output_dir: Path) -> None:
     _save_figure(fig, output_dir, "attitude_quaternion.png")
 
 
+def _has_kalman_estimate(df: pd.DataFrame) -> bool:
+    """Return whether the result table contains finite Kalman estimate samples."""
+
+    required_columns = ["q_kalman_w", "q_kalman_x", "q_kalman_y", "q_kalman_z"]
+
+    if any(column not in df for column in required_columns):
+        return False
+
+    return bool(df[required_columns].notna().any().any())
+
+
+def plot_kalman_state_quaternion(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot Kalman-estimated quaternion components against the truth model."""
+
+    if not _has_kalman_estimate(df):
+        return
+
+    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(9, 7))
+    components = [("w", "tab:blue"), ("x", "tab:orange"), ("y", "tab:green"), ("z", "tab:red")]
+
+    for component, color in components:
+        axes[0].plot(
+            df["t_s"],
+            df[f"q_eci_from_body_{component}"],
+            linestyle="--",
+            color=color,
+            alpha=0.55,
+            label=f"q_{component} true",
+        )
+        axes[0].plot(
+            df["t_s"], df[f"q_kalman_{component}"], color=color, label=f"q_{component} AEKF"
+        )
+
+    axes[0].set_ylabel("Quaternion component [-]")
+    axes[0].set_title("Kalman attitude state estimate")
+    axes[0].grid(True)
+    axes[0].legend(ncol=2)
+
+    axes[1].plot(df["t_s"], df["q_eci_from_body_norm"], linestyle="--", label="|q| true")
+    axes[1].plot(df["t_s"], df["q_kalman_norm"], label="|q| AEKF")
+    axes[1].set_xlabel("Time [s]")
+    axes[1].set_ylabel("Quaternion norm [-]")
+    axes[1].grid(True)
+    axes[1].legend()
+
+    _save_figure(fig, output_dir, "kalman_state_quaternion.png")
+
+
+def plot_kalman_state_error(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot the quaternion angular error of the Kalman state estimate."""
+
+    if not _has_kalman_estimate(df):
+        return
+
+    _plot_time_series(
+        df,
+        output_dir,
+        "kalman_state_error.png",
+        [("q_kalman_error_angle_deg", "attitude error", 1.0)],
+        "Error angle [deg]",
+        "Kalman attitude estimate error",
+    )
+
+
+def plot_kalman_state_covariance(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot one-sigma state uncertainty from the Kalman covariance diagonal."""
+
+    if not _has_kalman_estimate(df):
+        return
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    for column, label in [
+        ("sigma_kalman_w", "sigma(q_w)"),
+        ("sigma_kalman_x", "sigma(q_x)"),
+        ("sigma_kalman_y", "sigma(q_y)"),
+        ("sigma_kalman_z", "sigma(q_z)"),
+    ]:
+        ax.semilogy(df["t_s"], df[column], label=label)
+
+    ax.set_xlabel("Time [s]")
+    ax.set_ylabel("1-sigma quaternion uncertainty [-]")
+    ax.set_title("Kalman state covariance diagonal")
+    ax.grid(True, which="both")
+    ax.legend()
+
+    _save_figure(fig, output_dir, "kalman_state_covariance.png")
+
+
 def plot_angular_velocity_body(df: pd.DataFrame, output_dir: Path) -> None:
     """Plot body-frame angular velocity components over time."""
 
