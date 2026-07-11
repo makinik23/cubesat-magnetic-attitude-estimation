@@ -73,7 +73,28 @@ RESULT_COLUMNS = [
     "RT_R_minus_I_31",
     "RT_R_minus_I_32",
     "RT_R_minus_I_33",
+    "q_kalman_w",
+    "q_kalman_x",
+    "q_kalman_y",
+    "q_kalman_z",
+    "q_kalman_norm",
+    "q_kalman_error_angle_rad",
+    "q_kalman_error_angle_deg",
+    "P_kalman_ww",
+    "P_kalman_xx",
+    "P_kalman_yy",
+    "P_kalman_zz",
+    "sigma_kalman_w",
+    "sigma_kalman_x",
+    "sigma_kalman_y",
+    "sigma_kalman_z",
+    "innovation_kalman_x_T",
+    "innovation_kalman_y_T",
+    "innovation_kalman_z_T",
+    "innovation_kalman_norm_T",
 ]
+
+KALMAN_RESULT_COLUMNS = RESULT_COLUMNS[RESULT_COLUMNS.index("q_kalman_w") :]
 
 
 def build_results_dataframe(result: SimulationResult) -> pd.DataFrame:
@@ -150,7 +171,71 @@ def build_results_dataframe(result: SimulationResult) -> pd.DataFrame:
         for col in range(3):
             df[f"RT_R_minus_I_{row + 1}{col + 1}"] = attitude.rt_r_minus_i[:, row, col]
 
+    _add_kalman_columns(df, result)
+
     return df[RESULT_COLUMNS]
+
+
+def _add_kalman_columns(df: pd.DataFrame, result: SimulationResult) -> None:
+    """Add Kalman estimate columns, using NaN placeholders when no filter ran."""
+
+    for column in KALMAN_RESULT_COLUMNS:
+        df[column] = np.nan
+
+    estimate = result.kalman_estimate
+
+    if estimate is None:
+        return
+
+    sample_count = len(df)
+    states = np.asarray(estimate.state, dtype=np.float64)
+    covariance = np.asarray(estimate.covariance, dtype=np.float64)
+
+    if states.shape != (sample_count, 4):
+        raise ValueError("Kalman estimate state must have shape (N, 4).")
+    if covariance.shape != (sample_count, 4, 4):
+        raise ValueError("Kalman estimate covariance must have shape (N, 4, 4).")
+
+    df["q_kalman_w"] = states[:, 0]
+    df["q_kalman_x"] = states[:, 1]
+    df["q_kalman_y"] = states[:, 2]
+    df["q_kalman_z"] = states[:, 3]
+    df["q_kalman_norm"] = np.linalg.norm(states, axis=1)
+
+    true_quaternions = result.attitude.q_eci_from_body
+    denominator = np.linalg.norm(states, axis=1) * np.linalg.norm(true_quaternions, axis=1)
+    cosine_half_angle = np.full(sample_count, np.nan, dtype=np.float64)
+    np.divide(
+        np.abs(np.einsum("ij,ij->i", states, true_quaternions)),
+        denominator,
+        out=cosine_half_angle,
+        where=denominator > 0.0,
+    )
+    cosine_half_angle = np.clip(cosine_half_angle, -1.0, 1.0)
+    df["q_kalman_error_angle_rad"] = 2.0 * np.arccos(cosine_half_angle)
+    df["q_kalman_error_angle_deg"] = np.rad2deg(df["q_kalman_error_angle_rad"])
+
+    covariance_diagonal = np.diagonal(covariance, axis1=1, axis2=2)
+    df["P_kalman_ww"] = covariance_diagonal[:, 0]
+    df["P_kalman_xx"] = covariance_diagonal[:, 1]
+    df["P_kalman_yy"] = covariance_diagonal[:, 2]
+    df["P_kalman_zz"] = covariance_diagonal[:, 3]
+    sigma = np.sqrt(np.maximum(covariance_diagonal, 0.0))
+    df["sigma_kalman_w"] = sigma[:, 0]
+    df["sigma_kalman_x"] = sigma[:, 1]
+    df["sigma_kalman_y"] = sigma[:, 2]
+    df["sigma_kalman_z"] = sigma[:, 3]
+
+    if estimate.innovation is not None:
+        innovation = np.asarray(estimate.innovation, dtype=np.float64)
+
+        if innovation.shape != (sample_count, 3):
+            raise ValueError("Kalman innovation must have shape (N, 3).")
+
+        df["innovation_kalman_x_T"] = innovation[:, 0]
+        df["innovation_kalman_y_T"] = innovation[:, 1]
+        df["innovation_kalman_z_T"] = innovation[:, 2]
+        df["innovation_kalman_norm_T"] = np.linalg.norm(innovation, axis=1)
 
 
 def save_results(df: pd.DataFrame, output_dir: Path) -> Path:

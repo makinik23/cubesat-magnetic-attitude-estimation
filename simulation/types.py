@@ -97,6 +97,32 @@ class AttitudeState:
 
 
 @dataclass(frozen=True, slots=True)
+class KalmanFilterInput:
+    """
+    Signals shared by Kalman-family attitude estimators.
+
+    Measurements are body-frame magnetic-field samples. Reference vectors are
+    the corresponding inertial magnetic-field model samples.
+    """
+
+    t_s: ArrayFloat64
+    measurements_body_t: ArrayFloat64
+    reference_vectors_eci_t: ArrayFloat64
+    angular_rate_body_radps: ArrayFloat64 | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class KalmanFilterEstimate:
+    """State and covariance trajectory returned by a Kalman-family estimator."""
+
+    t_s: ArrayFloat64
+    state: ArrayFloat64
+    covariance: ArrayFloat64
+    innovation: ArrayFloat64 | None = None
+    innovation_covariance: ArrayFloat64 | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class SimulationResult:
     """Complete simulation result before tabular export or plotting."""
 
@@ -106,3 +132,4 @@ class SimulationResult:
     attitude: AttitudeState
     b_body_t: ArrayFloat64
     b_magnetometer_t: ArrayFloat64
+    kalman_estimate: KalmanFilterEstimate | None = None
