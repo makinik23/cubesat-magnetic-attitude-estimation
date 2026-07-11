@@ -13,6 +13,7 @@ from simulation.config import (
     create_default_orbit,
     create_default_simulation_config,
 )
+from simulation.estimation import AEKF, AEKFConfig
 from simulation.visualization import (
     animate_attitude_cube,
     plot_angular_velocity_body,
@@ -20,6 +21,9 @@ from simulation.visualization import (
     plot_attitude_orientation_lvlh,
     plot_attitude_quaternion,
     plot_attitude_quaternion_one_minus,
+    plot_kalman_state_covariance,
+    plot_kalman_state_error,
+    plot_kalman_state_quaternion,
     plot_magnetic_field_body,
     plot_magnetic_field_body_norm,
     plot_magnetic_field_eci,
@@ -54,6 +58,9 @@ PLOT_OUTPUTS: tuple[tuple[str, Plotter], ...] = (
     ("attitude_quaternion.png", plot_attitude_quaternion),
     ("attitude_quaternion_one_minus.png", plot_attitude_quaternion_one_minus),
     ("angular_velocity_body.png", plot_angular_velocity_body),
+    ("kalman_state_quaternion.png", plot_kalman_state_quaternion),
+    ("kalman_state_error.png", plot_kalman_state_error),
+    ("kalman_state_covariance.png", plot_kalman_state_covariance),
 )
 
 ANIMATION_OUTPUTS: tuple[tuple[str, Plotter], ...] = (("attitude_cube.gif", animate_attitude_cube),)
@@ -75,7 +82,8 @@ def create_default_runner() -> SimulationRunner:
     return SimulationRunner(
         magnetometer_model=MagnetometerModel(
             bias_body_t=np.array([0.3e-6, -0.2e-6, 0.1e-6]), noise_std_t=1.0e-6, seed=42
-        )
+        ),
+        kalman_filter=AEKF(AEKFConfig(measurement_noise=np.eye(3, dtype=np.float64) * (1.0e-6**2))),
     )
 
 
@@ -86,7 +94,10 @@ def save_plot_outputs(df: pd.DataFrame, output_dir: Path) -> list[Path]:
 
     for filename, plotter in PLOT_OUTPUTS:
         plotter(df, output_dir)
-        paths.append(output_dir / filename)
+        path = output_dir / filename
+
+        if path.exists():
+            paths.append(path)
 
     return paths
 

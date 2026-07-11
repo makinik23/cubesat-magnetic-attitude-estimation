@@ -11,6 +11,7 @@ from simulation.interfaces import (
     AttitudePropagator,
     BodyFieldProjector,
     FrameTransformer,
+    KalmanFilter,
     Magnetometer,
     MagneticFieldModel,
     OrbitPropagator,
@@ -20,6 +21,7 @@ from simulation.sensors import MagnetometerModel
 from simulation.types import (
     AttitudeConfig,
     ClassicalOrbitalElements,
+    KalmanFilterInput,
     SimulationConfig,
     SimulationResult,
 )
@@ -35,6 +37,7 @@ class SimulationRunner:
     attitude_propagator: AttitudePropagator = field(default_factory=SolveIvpAttitudePropagator)
     body_field_projector: BodyFieldProjector = field(default_factory=RotationBodyFieldProjector)
     magnetometer_model: Magnetometer = field(default_factory=MagnetometerModel)
+    kalman_filter: KalmanFilter | None = None
 
     def run(
         self,
@@ -49,6 +52,17 @@ class SimulationRunner:
         attitude = self.attitude_propagator.propagate(orbit.t_s, attitude_config)
         b_body_t = self.body_field_projector.project(magnetic_field.b_eci_t, attitude)
         b_magnetometer_t = self.magnetometer_model.measure(b_body_t)
+        kalman_estimate = None
+
+        if self.kalman_filter is not None:
+            kalman_estimate = self.kalman_filter.estimate(
+                KalmanFilterInput(
+                    t_s=orbit.t_s,
+                    measurements_body_t=b_magnetometer_t,
+                    reference_vectors_eci_t=magnetic_field.b_eci_t,
+                    angular_rate_body_radps=attitude.omega_body_radps,
+                )
+            )
 
         return SimulationResult(
             orbit=orbit,
@@ -57,4 +71,5 @@ class SimulationRunner:
             attitude=attitude,
             b_body_t=b_body_t,
             b_magnetometer_t=b_magnetometer_t,
+            kalman_estimate=kalman_estimate,
         )
