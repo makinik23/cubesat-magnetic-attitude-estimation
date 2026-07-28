@@ -1,4 +1,4 @@
-"""Tests for the quaternion-only additive EKF base class."""
+"""Tests for the preserved quaternion-only additive EKF base class."""
 
 from __future__ import annotations
 
@@ -6,15 +6,15 @@ import unittest
 
 import numpy as np
 
-from simulation.estimation import AEKF, AEKFConfig
+from simulation.estimation import QuaternionAEKF, QuaternionAEKFConfig
 from simulation.types import KalmanFilterInput
 
 
-class AEKFTests(unittest.TestCase):
-    """Check the AEKF process and measurement conventions."""
+class QuaternionAEKFTests(unittest.TestCase):
+    """Check the quaternion-only AEKF process and measurement conventions."""
 
     def test_predict_quaternion_uses_body_rate(self) -> None:
-        aekf = AEKF()
+        aekf = QuaternionAEKF()
 
         quaternion = aekf.predict_quaternion(
             np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64),
@@ -26,7 +26,7 @@ class AEKFTests(unittest.TestCase):
         np.testing.assert_allclose(quaternion, expected, atol=1e-12)
 
     def test_predict_measurement_projects_eci_field_to_body(self) -> None:
-        aekf = AEKF()
+        aekf = QuaternionAEKF()
         angle_rad = np.pi / 2.0
         quaternion = np.array(
             [np.cos(angle_rad / 2.0), 0.0, 0.0, np.sin(angle_rad / 2.0)], dtype=np.float64
@@ -39,8 +39,8 @@ class AEKFTests(unittest.TestCase):
         np.testing.assert_allclose(measurement, np.array([1.0, 0.0, 0.0]), atol=1e-12)
 
     def test_estimate_returns_normalized_quaternion_trajectory(self) -> None:
-        aekf = AEKF(
-            AEKFConfig(
+        aekf = QuaternionAEKF(
+            QuaternionAEKFConfig(
                 initial_quaternion_eci_from_body=np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64),
                 initial_covariance=np.eye(4, dtype=np.float64) * 1e-3,
                 process_noise=np.eye(4, dtype=np.float64) * 1e-12,

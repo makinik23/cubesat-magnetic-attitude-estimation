@@ -109,10 +109,7 @@ class SimulationRunnerTests(unittest.TestCase):
                 np.testing.assert_allclose(inputs.t_s, orbit_state.t_s)
                 np.testing.assert_allclose(inputs.measurements_body_t, b_magnetometer_t)
                 np.testing.assert_allclose(inputs.reference_vectors_eci_t, magnetic_state.b_eci_t)
-                angular_rate_body_radps = inputs.angular_rate_body_radps
-                test_case.assertIsNotNone(angular_rate_body_radps)
-                assert angular_rate_body_radps is not None
-                np.testing.assert_allclose(angular_rate_body_radps, attitude_state.omega_body_radps)
+                test_case.assertIsNone(inputs.angular_rate_body_radps)
                 calls.append("kalman")
                 return kalman_estimate
 

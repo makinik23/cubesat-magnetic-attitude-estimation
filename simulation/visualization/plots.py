@@ -313,10 +313,16 @@ def _has_kalman_estimate(df: pd.DataFrame) -> bool:
 
     required_columns = ["q_kalman_w", "q_kalman_x", "q_kalman_y", "q_kalman_z"]
 
+    return _has_finite_columns(df, required_columns)
+
+
+def _has_finite_columns(df: pd.DataFrame, required_columns: list[str]) -> bool:
+    """Return whether all requested columns exist and contain finite samples."""
+
     if any(column not in df for column in required_columns):
         return False
 
-    return bool(df[required_columns].notna().any().any())
+    return bool(np.isfinite(df[required_columns].to_numpy(dtype=np.float64)).any())
 
 
 def plot_kalman_state_quaternion(df: pd.DataFrame, output_dir: Path) -> None:
@@ -395,6 +401,64 @@ def plot_kalman_state_covariance(df: pd.DataFrame, output_dir: Path) -> None:
     ax.legend()
 
     _save_figure(fig, output_dir, "kalman_state_covariance.png")
+
+
+def plot_kalman_angular_velocity(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot Kalman angular-rate estimates against truth."""
+
+    required_columns = ["omega_kalman_x_degps", "omega_kalman_y_degps", "omega_kalman_z_degps"]
+
+    if not _has_finite_columns(df, required_columns):
+        return
+
+    fig, axes = plt.subplots(3, 1, sharex=True, figsize=(9, 7))
+    components = [("x", "tab:blue"), ("y", "tab:orange"), ("z", "tab:green")]
+
+    for axis, (component, color) in zip(axes, components):
+        axis.plot(
+            df["t_s"],
+            df[f"omega_body_{component}_degps"],
+            linestyle="--",
+            color=color,
+            alpha=0.55,
+            label=f"omega_{component} true",
+        )
+        axis.plot(
+            df["t_s"],
+            df[f"omega_kalman_{component}_degps"],
+            color=color,
+            label=f"omega_{component} AEKF",
+        )
+        axis.set_ylabel("deg/s")
+        axis.grid(True)
+        axis.legend(loc="upper right")
+
+    axes[0].set_title("Kalman angular-rate state estimate")
+    axes[-1].set_xlabel("Time [s]")
+
+    _save_figure(fig, output_dir, "kalman_angular_velocity.png")
+
+
+def plot_kalman_magnetometer_bias(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot Kalman magnetometer-bias estimates."""
+
+    required_columns = ["mag_bias_kalman_x_uT", "mag_bias_kalman_y_uT", "mag_bias_kalman_z_uT"]
+
+    if not _has_finite_columns(df, required_columns):
+        return
+
+    _plot_time_series(
+        df,
+        output_dir,
+        "kalman_magnetometer_bias.png",
+        [
+            ("mag_bias_kalman_x_uT", "bias_x AEKF", 1.0),
+            ("mag_bias_kalman_y_uT", "bias_y AEKF", 1.0),
+            ("mag_bias_kalman_z_uT", "bias_z AEKF", 1.0),
+        ],
+        "Magnetometer bias [uT]",
+        "Kalman magnetometer-bias estimate",
+    )
 
 
 def plot_angular_velocity_body(df: pd.DataFrame, output_dir: Path) -> None:

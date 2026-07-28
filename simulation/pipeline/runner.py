@@ -60,7 +60,6 @@ class SimulationRunner:
                     t_s=orbit.t_s,
                     measurements_body_t=b_magnetometer_t,
                     reference_vectors_eci_t=magnetic_field.b_eci_t,
-                    angular_rate_body_radps=attitude.omega_body_radps,
                 )
             )
 

@@ -103,7 +103,9 @@ class KalmanFilterInput:
     Signals shared by Kalman-family attitude estimators.
 
     Measurements are body-frame magnetic-field samples. Reference vectors are
-    the corresponding inertial magnetic-field model samples.
+    the corresponding inertial magnetic-field model samples. Angular rates are
+    optional known propagation inputs for filters that use an external rate
+    source.
     """
 
     t_s: ArrayFloat64

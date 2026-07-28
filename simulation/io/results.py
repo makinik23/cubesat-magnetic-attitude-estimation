@@ -49,6 +49,9 @@ RESULT_COLUMNS = [
     "omega_body_x_radps",
     "omega_body_y_radps",
     "omega_body_z_radps",
+    "omega_body_x_degps",
+    "omega_body_y_degps",
+    "omega_body_z_degps",
     "yaw_eci_from_body_rad",
     "pitch_eci_from_body_rad",
     "roll_eci_from_body_rad",
@@ -104,6 +107,32 @@ RESULT_COLUMNS = [
     "sigma_kalman_x",
     "sigma_kalman_y",
     "sigma_kalman_z",
+    "omega_kalman_x_radps",
+    "omega_kalman_y_radps",
+    "omega_kalman_z_radps",
+    "omega_kalman_x_degps",
+    "omega_kalman_y_degps",
+    "omega_kalman_z_degps",
+    "omega_kalman_error_x_radps",
+    "omega_kalman_error_y_radps",
+    "omega_kalman_error_z_radps",
+    "omega_kalman_error_norm_radps",
+    "omega_kalman_error_norm_degps",
+    "mag_bias_kalman_x_T",
+    "mag_bias_kalman_y_T",
+    "mag_bias_kalman_z_T",
+    "mag_bias_kalman_x_uT",
+    "mag_bias_kalman_y_uT",
+    "mag_bias_kalman_z_uT",
+    "sigma_kalman_omega_x_radps",
+    "sigma_kalman_omega_y_radps",
+    "sigma_kalman_omega_z_radps",
+    "sigma_kalman_mag_bias_x_T",
+    "sigma_kalman_mag_bias_y_T",
+    "sigma_kalman_mag_bias_z_T",
+    "sigma_kalman_mag_bias_x_uT",
+    "sigma_kalman_mag_bias_y_uT",
+    "sigma_kalman_mag_bias_z_uT",
     "innovation_kalman_x_T",
     "innovation_kalman_y_T",
     "innovation_kalman_z_T",
@@ -198,6 +227,9 @@ def build_results_dataframe(result: SimulationResult) -> pd.DataFrame:
     df["yaw_lvlh_from_body_deg"] = np.rad2deg(euler_lvlh_from_body_rad[:, 0])
     df["pitch_lvlh_from_body_deg"] = np.rad2deg(euler_lvlh_from_body_rad[:, 1])
     df["roll_lvlh_from_body_deg"] = np.rad2deg(euler_lvlh_from_body_rad[:, 2])
+    df["omega_body_x_degps"] = np.rad2deg(attitude.omega_body_radps[:, 0])
+    df["omega_body_y_degps"] = np.rad2deg(attitude.omega_body_radps[:, 1])
+    df["omega_body_z_degps"] = np.rad2deg(attitude.omega_body_radps[:, 2])
     df["q_eci_from_body_norm"] = np.linalg.norm(attitude.q_eci_from_body, axis=1)
     df["B_body_norm_T"] = np.linalg.norm(b_body_t, axis=1)
     df["B_magnetometer_norm_T"] = np.linalg.norm(b_magnetometer_t, axis=1)
@@ -231,22 +263,26 @@ def _add_kalman_columns(df: pd.DataFrame, result: SimulationResult) -> None:
     states = np.asarray(estimate.state, dtype=np.float64)
     covariance = np.asarray(estimate.covariance, dtype=np.float64)
 
-    if states.shape != (sample_count, 4):
-        raise ValueError("Kalman estimate state must have shape (N, 4).")
-    if covariance.shape != (sample_count, 4, 4):
-        raise ValueError("Kalman estimate covariance must have shape (N, 4, 4).")
+    if states.ndim != 2 or states.shape[0] != sample_count or states.shape[1] not in (4, 10):
+        raise ValueError("Kalman estimate state must have shape (N, 4) or (N, 10).")
 
-    df["q_kalman_w"] = states[:, 0]
-    df["q_kalman_x"] = states[:, 1]
-    df["q_kalman_y"] = states[:, 2]
-    df["q_kalman_z"] = states[:, 3]
-    df["q_kalman_norm"] = np.linalg.norm(states, axis=1)
+    state_size = states.shape[1]
+
+    if covariance.shape != (sample_count, state_size, state_size):
+        raise ValueError("Kalman estimate covariance must have shape (N, state_size, state_size).")
+
+    quaternions = states[:, :4]
+    df["q_kalman_w"] = quaternions[:, 0]
+    df["q_kalman_x"] = quaternions[:, 1]
+    df["q_kalman_y"] = quaternions[:, 2]
+    df["q_kalman_z"] = quaternions[:, 3]
+    df["q_kalman_norm"] = np.linalg.norm(quaternions, axis=1)
 
     true_quaternions = result.attitude.q_eci_from_body
-    denominator = np.linalg.norm(states, axis=1) * np.linalg.norm(true_quaternions, axis=1)
+    denominator = np.linalg.norm(quaternions, axis=1) * np.linalg.norm(true_quaternions, axis=1)
     cosine_half_angle = np.full(sample_count, np.nan, dtype=np.float64)
     np.divide(
-        np.abs(np.einsum("ij,ij->i", states, true_quaternions)),
+        np.abs(np.einsum("ij,ij->i", quaternions, true_quaternions)),
         denominator,
         out=cosine_half_angle,
         where=denominator > 0.0,
@@ -265,6 +301,40 @@ def _add_kalman_columns(df: pd.DataFrame, result: SimulationResult) -> None:
     df["sigma_kalman_x"] = sigma[:, 1]
     df["sigma_kalman_y"] = sigma[:, 2]
     df["sigma_kalman_z"] = sigma[:, 3]
+
+    if state_size == 10:
+        omega_estimate = states[:, 4:7]
+        mag_bias_estimate = states[:, 7:10]
+        omega_error = omega_estimate - result.attitude.omega_body_radps
+
+        df["omega_kalman_x_radps"] = omega_estimate[:, 0]
+        df["omega_kalman_y_radps"] = omega_estimate[:, 1]
+        df["omega_kalman_z_radps"] = omega_estimate[:, 2]
+        df["omega_kalman_x_degps"] = np.rad2deg(omega_estimate[:, 0])
+        df["omega_kalman_y_degps"] = np.rad2deg(omega_estimate[:, 1])
+        df["omega_kalman_z_degps"] = np.rad2deg(omega_estimate[:, 2])
+        df["omega_kalman_error_x_radps"] = omega_error[:, 0]
+        df["omega_kalman_error_y_radps"] = omega_error[:, 1]
+        df["omega_kalman_error_z_radps"] = omega_error[:, 2]
+        df["omega_kalman_error_norm_radps"] = np.linalg.norm(omega_error, axis=1)
+        df["omega_kalman_error_norm_degps"] = np.rad2deg(df["omega_kalman_error_norm_radps"])
+
+        df["mag_bias_kalman_x_T"] = mag_bias_estimate[:, 0]
+        df["mag_bias_kalman_y_T"] = mag_bias_estimate[:, 1]
+        df["mag_bias_kalman_z_T"] = mag_bias_estimate[:, 2]
+        df["mag_bias_kalman_x_uT"] = mag_bias_estimate[:, 0] * 1.0e6
+        df["mag_bias_kalman_y_uT"] = mag_bias_estimate[:, 1] * 1.0e6
+        df["mag_bias_kalman_z_uT"] = mag_bias_estimate[:, 2] * 1.0e6
+
+        df["sigma_kalman_omega_x_radps"] = sigma[:, 4]
+        df["sigma_kalman_omega_y_radps"] = sigma[:, 5]
+        df["sigma_kalman_omega_z_radps"] = sigma[:, 6]
+        df["sigma_kalman_mag_bias_x_T"] = sigma[:, 7]
+        df["sigma_kalman_mag_bias_y_T"] = sigma[:, 8]
+        df["sigma_kalman_mag_bias_z_T"] = sigma[:, 9]
+        df["sigma_kalman_mag_bias_x_uT"] = sigma[:, 7] * 1.0e6
+        df["sigma_kalman_mag_bias_y_uT"] = sigma[:, 8] * 1.0e6
+        df["sigma_kalman_mag_bias_z_uT"] = sigma[:, 9] * 1.0e6
 
     if estimate.innovation is not None:
         innovation = np.asarray(estimate.innovation, dtype=np.float64)
