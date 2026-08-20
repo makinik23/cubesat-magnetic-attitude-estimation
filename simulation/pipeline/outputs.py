@@ -11,6 +11,7 @@ import pandas as pd
 
 from simulation.config import (
     create_default_attitude_config,
+    create_default_magnetometer_config,
     create_default_orbit,
     create_default_simulation_config,
 )
@@ -45,6 +46,7 @@ from simulation.types import (
     AttitudeConfig,
     ClassicalOrbitalElements,
     KalmanFilterInput,
+    MagnetometerConfig,
     SimulationConfig,
     SimulationResult,
 )
@@ -100,9 +102,16 @@ def load_default_inputs() -> tuple[ClassicalOrbitalElements, SimulationConfig, A
     )
 
 
-def create_default_runner(attitude_config: AttitudeConfig | None = None) -> SimulationRunner:
+def create_default_runner(
+    attitude_config: AttitudeConfig | None = None,
+    magnetometer_config: MagnetometerConfig | None = None,
+) -> SimulationRunner:
     """Create the default simulation runner."""
 
+    if magnetometer_config is None:
+        magnetometer_config = create_default_magnetometer_config()
+
+    sensor_axes_from_body = magnetometer_config.sensor_axes_from_body
     initial_omega_body_radps = (
         np.zeros(3, dtype=np.float64)
         if attitude_config is None
@@ -111,7 +120,11 @@ def create_default_runner(attitude_config: AttitudeConfig | None = None) -> Simu
 
     return SimulationRunner(
         magnetometer_model=MagnetometerModel(
-            bias_body_t=np.array([0.3e-6, -0.2e-6, 0.1e-6]), noise_std_t=1.0e-6, seed=42
+            bias_sensor_t=magnetometer_config.bias_sensor_t,
+            noise_std_t=magnetometer_config.noise_std_t,
+            seed=magnetometer_config.seed,
+            sensor_axes_from_body=sensor_axes_from_body,
+            positions_body_m=magnetometer_config.positions_body_m,
         ),
         kalman_filter=AEKF(
             AEKFConfig(
@@ -126,21 +139,28 @@ def create_default_runner(attitude_config: AttitudeConfig | None = None) -> Simu
                     if attitude_config is None
                     else attitude_config.torque_body_nm
                 ),
-                measurement_noise=np.eye(3, dtype=np.float64) * (1.0e-6**2),
+                sensor_axes_from_body=sensor_axes_from_body,
+                measurement_noise=_measurement_noise_from_sensor_config(magnetometer_config),
             )
         ),
     )
 
 
 def build_attitude_aekf_dataframe(
-    result: SimulationResult, attitude_config: AttitudeConfig
+    result: SimulationResult,
+    attitude_config: AttitudeConfig,
+    magnetometer_config: MagnetometerConfig | None = None,
 ) -> pd.DataFrame:
     """Build a result table for the preserved quaternion-only AEKF baseline."""
+
+    if magnetometer_config is None:
+        magnetometer_config = create_default_magnetometer_config()
 
     attitude_filter = QuaternionAEKF(
         QuaternionAEKFConfig(
             initial_quaternion_eci_from_body=attitude_config.initial_quaternion_eci_from_body,
-            measurement_noise=np.eye(3, dtype=np.float64) * (1.0e-6**2),
+            sensor_axes_from_body=magnetometer_config.sensor_axes_from_body,
+            measurement_noise=_measurement_noise_from_sensor_config(magnetometer_config),
         )
     )
     attitude_estimate = attitude_filter.estimate(
@@ -153,6 +173,15 @@ def build_attitude_aekf_dataframe(
     attitude_result = replace(result, kalman_estimate=attitude_estimate)
 
     return build_results_dataframe(attitude_result)
+
+
+def _measurement_noise_from_sensor_config(config: MagnetometerConfig) -> np.ndarray:
+    noise_std_t = np.asarray(config.noise_std_t, dtype=np.float64)
+
+    if noise_std_t.shape == ():
+        return np.eye(3, dtype=np.float64) * float(noise_std_t) ** 2
+
+    return np.diag(noise_std_t**2)
 
 
 def save_kalman_results(df: pd.DataFrame, output_dir: Path) -> Path:
@@ -255,10 +284,11 @@ def run_orbit_pipeline(output_dir: Path) -> None:
     """Run the orbit propagation pipeline."""
 
     elements, simulation_config, attitude_config = load_default_inputs()
-    runner = create_default_runner(attitude_config)
+    magnetometer_config = create_default_magnetometer_config()
+    runner = create_default_runner(attitude_config, magnetometer_config)
     result = runner.run(elements, simulation_config, attitude_config)
     df = build_results_dataframe(result)
-    attitude_aekf_df = build_attitude_aekf_dataframe(result, attitude_config)
+    attitude_aekf_df = build_attitude_aekf_dataframe(result, attitude_config, magnetometer_config)
 
     cleanup_legacy_kalman_outputs(output_dir)
     csv_path = save_results(df, output_dir)

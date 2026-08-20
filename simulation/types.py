@@ -56,6 +56,23 @@ class AttitudeConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class MagnetometerConfig:
+    """Three-axis magnetometer mounting and noise settings."""
+
+    bias_sensor_t: ArrayFloat64
+    noise_std_t: float | ArrayFloat64
+    seed: int | None
+    sensor_axes_from_body: ArrayFloat64
+    positions_body_m: ArrayFloat64
+
+    @property
+    def rotation_sensor_from_body(self) -> ArrayFloat64:
+        """Deprecated alias for the sensor-axis projection matrix."""
+
+        return self.sensor_axes_from_body
+
+
+@dataclass(frozen=True, slots=True)
 class OrbitState:
     """Orbit propagation results in ECI coordinates."""
 
@@ -102,7 +119,8 @@ class KalmanFilterInput:
     """
     Signals shared by Kalman-family attitude estimators.
 
-    Measurements are body-frame magnetic-field samples. Reference vectors are
+    Measurements are magnetometer-frame magnetic-field samples. The field name
+    is kept for compatibility with existing call sites. Reference vectors are
     the corresponding inertial magnetic-field model samples. Angular rates are
     optional known propagation inputs for filters that use an external rate
     source.

@@ -28,11 +28,17 @@ def _default_measurement_noise() -> ArrayFloat64:
     return np.eye(3, dtype=np.float64) * (1e-6**2)
 
 
+def _default_sensor_axes() -> ArrayFloat64:
+    return np.eye(3, dtype=np.float64)
+
+
 @dataclass(frozen=True, slots=True)
 class QuaternionAEKFConfig:
     """Configuration for a quaternion-only additive EKF."""
 
     initial_quaternion_eci_from_body: ArrayFloat64 = field(default_factory=_default_quaternion)
+    sensor_axes_from_body: ArrayFloat64 | None = None
+    rotation_sensor_from_body: ArrayFloat64 | None = None
     initial_covariance: ArrayFloat64 = field(default_factory=_default_initial_covariance)
     process_noise: ArrayFloat64 = field(default_factory=_default_process_noise)
     measurement_noise: ArrayFloat64 = field(default_factory=_default_measurement_noise)
@@ -44,8 +50,8 @@ class QuaternionAEKF:
     Quaternion-state additive extended Kalman filter.
 
     The state is scalar-first ``q_eci_from_body``. The measurement model predicts
-    the body-frame magnetometer sample from the inertial magnetic-field vector:
-    ``B_body = R_eci_from_body(q).T @ B_eci``.
+    the sensor-frame magnetometer sample from the inertial magnetic-field vector:
+    ``B_sensor = A_sensor_from_body @ R_eci_from_body(q).T @ B_eci``.
     """
 
     def __init__(self, config: QuaternionAEKFConfig | None = None) -> None:
@@ -53,6 +59,13 @@ class QuaternionAEKF:
         self.initial_quaternion_eci_from_body = normalize_quaternion(
             np.asarray(self.config.initial_quaternion_eci_from_body, dtype=np.float64)
         )
+        self.sensor_axes_from_body = _as_sensor_axes_matrix(
+            _resolve_sensor_axes(
+                self.config.sensor_axes_from_body, self.config.rotation_sensor_from_body
+            ),
+            "sensor_axes_from_body",
+        )
+        self.rotation_sensor_from_body = self.sensor_axes_from_body
         self.initial_covariance = _as_matrix(
             self.config.initial_covariance, (4, 4), "initial_covariance"
         )
@@ -221,12 +234,12 @@ class QuaternionAEKF:
     def predict_measurement(
         self, quaternion: ArrayFloat64, reference_vector_eci_t: ArrayFloat64
     ) -> ArrayFloat64:
-        """Compute ``h(q)`` for a body-frame magnetic-field measurement."""
+        """Compute ``h(q)`` for a sensor-frame magnetic-field measurement."""
 
         rotation_eci_from_body = quaternion_to_rotation_matrix(quaternion)
         reference = _as_vector(reference_vector_eci_t, 3, "reference_vector_eci_t")
 
-        return rotation_eci_from_body.T @ reference
+        return self.sensor_axes_from_body @ (rotation_eci_from_body.T @ reference)
 
     def measurement_jacobian(
         self, quaternion: ArrayFloat64, reference_vector_eci_t: ArrayFloat64
@@ -270,6 +283,19 @@ def _validate_inputs(
     return times_s, measurements_body_t, reference_vectors_eci_t, angular_rates_body_radps
 
 
+def _resolve_sensor_axes(
+    sensor_axes_from_body: ArrayFloat64 | None, rotation_sensor_from_body: ArrayFloat64 | None
+) -> ArrayFloat64:
+    if sensor_axes_from_body is not None and rotation_sensor_from_body is not None:
+        raise ValueError("Use either sensor_axes_from_body or rotation_sensor_from_body, not both.")
+    if sensor_axes_from_body is not None:
+        return sensor_axes_from_body
+    if rotation_sensor_from_body is not None:
+        return rotation_sensor_from_body
+
+    return _default_sensor_axes()
+
+
 def _finite_difference_jacobian(
     function: Callable[[ArrayFloat64], ArrayFloat64],
     point: ArrayFloat64,
@@ -302,6 +328,17 @@ def _as_matrix(values: ArrayFloat64, shape: tuple[int, int], name: str) -> Array
 
     if matrix.shape != shape:
         raise ValueError(f"{name} must have shape {shape}.")
+
+    return matrix
+
+
+def _as_sensor_axes_matrix(values: ArrayFloat64, name: str) -> ArrayFloat64:
+    matrix = _as_matrix(values, (3, 3), name)
+
+    if not np.all(np.isfinite(matrix)):
+        raise ValueError(f"{name} must contain finite values.")
+    if not np.allclose(matrix @ matrix.T, np.eye(3, dtype=np.float64), atol=1.0e-9):
+        raise ValueError(f"{name} must be orthonormal.")
 
     return matrix
 

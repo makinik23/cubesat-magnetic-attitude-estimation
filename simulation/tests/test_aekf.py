@@ -38,6 +38,19 @@ class QuaternionAEKFTests(unittest.TestCase):
 
         np.testing.assert_allclose(measurement, np.array([1.0, 0.0, 0.0]), atol=1e-12)
 
+    def test_predict_measurement_applies_sensor_mounting(self) -> None:
+        sensor_axes_from_body = np.array(
+            [[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]], dtype=np.float64
+        )
+        aekf = QuaternionAEKF(QuaternionAEKFConfig(sensor_axes_from_body=sensor_axes_from_body))
+
+        measurement = aekf.predict_measurement(
+            np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64),
+            np.array([1.0e-6, 2.0e-6, 3.0e-6], dtype=np.float64),
+        )
+
+        np.testing.assert_allclose(measurement, np.array([2.0e-6, 3.0e-6, 1.0e-6]))
+
     def test_estimate_returns_normalized_quaternion_trajectory(self) -> None:
         aekf = QuaternionAEKF(
             QuaternionAEKFConfig(

@@ -13,3 +13,16 @@ attitude:
     method: "DOP853"
     rtol: 0.0000000001
     atol: 0.000000000001
+
+magnetometer:
+  bias_sensor_uT: [0.3, -0.2, 0.1]
+  noise_std_uT: 1.0
+  seed: 42
+  rotation_sensor_from_body:
+    - [1.0, 0.0, 0.0]
+    - [0.0, 1.0, 0.0]
+    - [0.0, 0.0, 1.0]
+  positions_body_m:
+    - [0.02, 0.03, 0.0]
+    - [0.0, -0.02, 0.03]
+    - [-0.03, 0.0, -0.02]

@@ -308,6 +308,8 @@ def plot_attitude_quaternion_one_minus(df: pd.DataFrame, output_dir: Path) -> No
     axes[1].legend()
 
     _save_figure(fig, output_dir, "attitude_quaternion_one_minus.png")
+
+
 def _has_kalman_estimate(df: pd.DataFrame) -> bool:
     """Return whether the result table contains finite Kalman estimate samples."""
 

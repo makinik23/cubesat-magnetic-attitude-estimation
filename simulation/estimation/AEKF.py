@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -27,6 +26,10 @@ def _default_vector() -> ArrayFloat64:
     return np.zeros(3, dtype=np.float64)
 
 
+def _default_sensor_axes() -> ArrayFloat64:
+    return np.eye(3, dtype=np.float64)
+
+
 def _default_initial_covariance() -> ArrayFloat64:
     diagonal = np.array(
         [
@@ -35,7 +38,7 @@ def _default_initial_covariance() -> ArrayFloat64:
             1.0e-3,
             1.0e-3,
             *(np.deg2rad([0.05, 0.05, 0.05]) ** 2),
-            *((0.5e-6) ** 2 * np.ones(3, dtype=np.float64)),
+            *((1.0e-6) ** 2 * np.ones(3, dtype=np.float64)),
         ],
         dtype=np.float64,
     )
@@ -50,8 +53,8 @@ def _default_process_noise() -> ArrayFloat64:
             1.0e-10,
             1.0e-10,
             1.0e-10,
-            *(np.deg2rad([2.0e-4, 2.0e-4, 2.0e-4]) ** 2),
-            *((1.0e-10) ** 2 * np.ones(3, dtype=np.float64)),
+            *(np.deg2rad([1.0e-4, 1.0e-4, 1.0e-4]) ** 2),
+            *((3.0e-10) ** 2 * np.ones(3, dtype=np.float64)),
         ],
         dtype=np.float64,
     )
@@ -73,9 +76,12 @@ class AEKFConfig:
 
     initial_quaternion_eci_from_body: ArrayFloat64 = field(default_factory=_default_quaternion)
     initial_omega_body_radps: ArrayFloat64 = field(default_factory=_default_vector)
-    initial_magnetometer_bias_body_t: ArrayFloat64 = field(default_factory=_default_vector)
+    initial_magnetometer_bias_sensor_t: ArrayFloat64 | None = None
+    initial_magnetometer_bias_body_t: ArrayFloat64 | None = None
     inertia_kg_m2: ArrayFloat64 = field(default_factory=_default_inertia)
     torque_body_nm: ArrayFloat64 = field(default_factory=_default_vector)
+    sensor_axes_from_body: ArrayFloat64 | None = None
+    rotation_sensor_from_body: ArrayFloat64 | None = None
     initial_covariance: ArrayFloat64 = field(default_factory=_default_initial_covariance)
     process_noise: ArrayFloat64 = field(default_factory=_default_process_noise)
     measurement_noise: ArrayFloat64 = field(default_factory=_default_measurement_noise)
@@ -84,11 +90,11 @@ class AEKFConfig:
 
 class AEKF:
     """
-    Additive EKF with state ``[q, omega_body, magnetometer_bias_body]``.
+    Additive EKF with state ``[q, omega_body, magnetometer_bias_sensor]``.
 
     ``q`` is scalar-first and maps body coordinates into ECI. The only
-    measurement is the body-frame magnetic-field vector:
-    ``B_body = R_eci_from_body(q).T @ B_eci + b_mag``.
+    measurement is the sensor-frame magnetic-field vector:
+    ``B_sensor = A_sensor_from_body @ R_eci_from_body(q).T @ B_eci + b_mag_sensor``.
     """
 
     def __init__(self, config: AEKFConfig | None = None) -> None:
@@ -98,9 +104,7 @@ class AEKF:
                 np.asarray(self.config.initial_quaternion_eci_from_body, dtype=np.float64)
             ),
             _as_vector(self.config.initial_omega_body_radps, 3, "initial_omega_body_radps"),
-            _as_vector(
-                self.config.initial_magnetometer_bias_body_t, 3, "initial_magnetometer_bias_body_t"
-            ),
+            _resolve_initial_magnetometer_bias(self.config),
         )
         self.initial_covariance = _as_matrix(
             self.config.initial_covariance, (STATE_SIZE, STATE_SIZE), "initial_covariance"
@@ -110,6 +114,13 @@ class AEKF:
         )
         self.inertia_kg_m2 = _as_matrix(self.config.inertia_kg_m2, (3, 3), "inertia_kg_m2")
         self.torque_body_nm = _as_vector(self.config.torque_body_nm, 3, "torque_body_nm")
+        self.sensor_axes_from_body = _as_sensor_axes_matrix(
+            _resolve_sensor_axes(
+                self.config.sensor_axes_from_body, self.config.rotation_sensor_from_body
+            ),
+            "sensor_axes_from_body",
+        )
+        self.rotation_sensor_from_body = self.sensor_axes_from_body
         self.measurement_noise = _as_matrix(
             self.config.measurement_noise, (MEASUREMENT_SIZE, MEASUREMENT_SIZE), "measurement_noise"
         )
@@ -178,6 +189,8 @@ class AEKF:
         covariance_minus = (
             transition_jacobian @ covariance @ transition_jacobian.T + self.process_noise
         )
+        normalization_jacobian = _state_normalization_jacobian(state_minus)
+        covariance_minus = normalization_jacobian @ covariance_minus @ normalization_jacobian.T
 
         return state_minus, _symmetrize(covariance_minus), transition_jacobian
 
@@ -203,12 +216,15 @@ class AEKF:
         )
         gain = np.linalg.solve(innovation_covariance, measurement_jacobian @ covariance).T
 
-        state_plus = _normalize_state(state + gain @ innovation)
+        state_raw_plus = state + gain @ innovation
+        state_plus = _normalize_state(state_raw_plus)
         identity = np.eye(STATE_SIZE, dtype=np.float64)
         joseph_factor = identity - gain @ measurement_jacobian
         covariance_plus = (
             joseph_factor @ covariance @ joseph_factor.T + gain @ self.measurement_noise @ gain.T
         )
+        normalization_jacobian = _state_normalization_jacobian(state_raw_plus)
+        covariance_plus = normalization_jacobian @ covariance_plus @ normalization_jacobian.T
 
         return (
             state_plus,
@@ -223,12 +239,12 @@ class AEKF:
         if dt_s < 0.0:
             raise ValueError("dt_s must be nonnegative.")
 
-        quaternion, omega_body_radps, magnetometer_bias_body_t = _unpack_state(state)
+        quaternion, omega_body_radps, magnetometer_bias_sensor_t = _unpack_state(state)
         quaternion_minus, omega_minus = self.propagate_attitude_state(
             quaternion, omega_body_radps, dt_s
         )
 
-        return _pack_state(quaternion_minus, omega_minus, magnetometer_bias_body_t)
+        return _pack_state(quaternion_minus, omega_minus, magnetometer_bias_sensor_t)
 
     def propagate_attitude_state(
         self, quaternion: ArrayFloat64, omega_body_radps: ArrayFloat64, dt_s: float
@@ -295,48 +311,130 @@ class AEKF:
         return normalize_quaternion(quaternion_multiply(quaternion, delta_quaternion))
 
     def state_transition_jacobian(self, state: ArrayFloat64, dt_s: float) -> ArrayFloat64:
-        """Compute ``F_k = df/dx`` with central finite differences."""
+        """Compute the analytic ``F_k = df/dx`` for the RK4 process model."""
 
-        return _finite_difference_jacobian(
-            lambda perturbed_state: self.predict_state(perturbed_state, dt_s),
-            _normalize_state(_as_vector(state, STATE_SIZE, "state")),
-            STATE_SIZE,
-            self.jacobian_step,
+        if dt_s < 0.0:
+            raise ValueError("dt_s must be nonnegative.")
+
+        state = _as_vector(state, STATE_SIZE, "state")
+        attitude_jacobian = self.propagate_attitude_state_jacobian(state[:7], dt_s)
+
+        jacobian = np.eye(STATE_SIZE, dtype=np.float64)
+        jacobian[:7, :7] = attitude_jacobian
+
+        return jacobian
+
+    def propagate_attitude_state_jacobian(
+        self, attitude_state: ArrayFloat64, dt_s: float
+    ) -> ArrayFloat64:
+        """Compute the analytic RK4 Jacobian for ``[q, omega]`` propagation."""
+
+        state = _as_vector(attitude_state, 7, "attitude_state").copy()
+        state[:4] = normalize_quaternion(state[:4])
+        input_normalization_jacobian = _attitude_state_normalization_jacobian(
+            _as_vector(attitude_state, 7, "attitude_state")
         )
+
+        if dt_s < 0.0:
+            raise ValueError("dt_s must be nonnegative.")
+        if dt_s == 0.0:
+            return input_normalization_jacobian
+
+        k1 = self.attitude_state_derivative(state)
+        k1_jacobian = self.attitude_state_derivative_jacobian(state)
+
+        stage2_state = state + 0.5 * dt_s * k1
+        stage2_jacobian = np.eye(7, dtype=np.float64) + 0.5 * dt_s * k1_jacobian
+        k2 = self.attitude_state_derivative(stage2_state)
+        k2_jacobian = self.attitude_state_derivative_jacobian(stage2_state) @ stage2_jacobian
+
+        stage3_state = state + 0.5 * dt_s * k2
+        stage3_jacobian = np.eye(7, dtype=np.float64) + 0.5 * dt_s * k2_jacobian
+        k3 = self.attitude_state_derivative(stage3_state)
+        k3_jacobian = self.attitude_state_derivative_jacobian(stage3_state) @ stage3_jacobian
+
+        stage4_state = state + dt_s * k3
+        stage4_jacobian = np.eye(7, dtype=np.float64) + dt_s * k3_jacobian
+        k4_jacobian = self.attitude_state_derivative_jacobian(stage4_state) @ stage4_jacobian
+
+        propagated_state = state + (dt_s / 6.0) * (
+            k1 + 2.0 * k2 + 2.0 * k3 + self.attitude_state_derivative(stage4_state)
+        )
+        propagated_jacobian = np.eye(7, dtype=np.float64) + (dt_s / 6.0) * (
+            k1_jacobian + 2.0 * k2_jacobian + 2.0 * k3_jacobian + k4_jacobian
+        )
+        output_normalization_jacobian = _attitude_state_normalization_jacobian(propagated_state)
+
+        return output_normalization_jacobian @ propagated_jacobian @ input_normalization_jacobian
+
+    def attitude_state_derivative(self, attitude_state: ArrayFloat64) -> ArrayFloat64:
+        """Compute ``[q_dot, omega_dot]`` for the attitude process model."""
+
+        state = _as_vector(attitude_state, 7, "attitude_state")
+        quaternion = normalize_quaternion(state[:4])
+        omega = state[4:]
+        quaternion_dot, omega_dot = rigid_body_derivative(
+            quaternion, omega, self.inertia_kg_m2, self.torque_body_nm
+        )
+
+        return np.concatenate((quaternion_dot, omega_dot))
+
+    def attitude_state_derivative_jacobian(self, attitude_state: ArrayFloat64) -> ArrayFloat64:
+        """Compute the analytic continuous-time Jacobian for attitude dynamics."""
+
+        state = _as_vector(attitude_state, 7, "attitude_state")
+        quaternion = normalize_quaternion(state[:4])
+        omega = state[4:]
+
+        jacobian = np.zeros((7, 7), dtype=np.float64)
+        jacobian[:4, :4] = _quaternion_rate_jacobian_wrt_quaternion(omega) @ (
+            _quaternion_normalization_jacobian(state[:4])
+        )
+        jacobian[:4, 4:7] = _quaternion_rate_jacobian_wrt_omega(quaternion)
+        jacobian[4:7, 4:7] = _omega_derivative_jacobian(omega, self.inertia_kg_m2)
+
+        return jacobian
 
     def predict_measurement(
         self, quaternion: ArrayFloat64, reference_vector_eci_t: ArrayFloat64
     ) -> ArrayFloat64:
-        """Compute the bias-free magnetometer measurement ``h_B(q)``."""
+        """Compute the bias-free sensor-frame magnetometer measurement ``h_B(q)``."""
 
         rotation_eci_from_body = quaternion_to_rotation_matrix(quaternion)
         reference = _as_vector(reference_vector_eci_t, 3, "reference_vector_eci_t")
 
-        return rotation_eci_from_body.T @ reference
+        return self.sensor_axes_from_body @ (rotation_eci_from_body.T @ reference)
 
     def predict_measurement_from_state(
         self, state: ArrayFloat64, reference_vector_eci_t: ArrayFloat64
     ) -> ArrayFloat64:
         """Compute ``h(x)`` for a magnetometer sample."""
 
-        quaternion, _omega_body_radps, magnetometer_bias_body_t = _unpack_state(state)
+        quaternion, _omega_body_radps, magnetometer_bias_sensor_t = _unpack_state(state)
 
         return (
-            self.predict_measurement(quaternion, reference_vector_eci_t) + magnetometer_bias_body_t
+            self.predict_measurement(quaternion, reference_vector_eci_t)
+            + magnetometer_bias_sensor_t
         )
 
     def measurement_jacobian(
         self, state: ArrayFloat64, reference_vector_eci_t: ArrayFloat64
     ) -> ArrayFloat64:
-        """Compute ``H_k = dh/dx`` with central finite differences."""
+        """Compute the analytic ``H_k = dh/dx`` for the sensor-frame magnetometer."""
 
+        state = _as_vector(state, STATE_SIZE, "state")
+        quaternion, _omega_body_radps, _magnetometer_bias_sensor_t = _unpack_state(state)
         reference = _as_vector(reference_vector_eci_t, 3, "reference_vector_eci_t")
-        return _finite_difference_jacobian(
-            lambda perturbed_state: self.predict_measurement_from_state(perturbed_state, reference),
-            _normalize_state(_as_vector(state, STATE_SIZE, "state")),
-            MEASUREMENT_SIZE,
-            self.jacobian_step,
+
+        jacobian = np.zeros((MEASUREMENT_SIZE, STATE_SIZE), dtype=np.float64)
+        jacobian[:, QUATERNION_SLICE] = (
+            self.sensor_axes_from_body
+            @ _rotation_transpose_vector_jacobian(quaternion, reference)
+            @ _quaternion_normalization_jacobian(state[QUATERNION_SLICE])
         )
+        jacobian[:, MAGNETOMETER_BIAS_SLICE] = np.eye(3, dtype=np.float64)
+
+        return jacobian
 
 
 def _validate_inputs(inputs: KalmanFilterInput) -> tuple[ArrayFloat64, ArrayFloat64, ArrayFloat64]:
@@ -358,16 +456,50 @@ def _validate_inputs(inputs: KalmanFilterInput) -> tuple[ArrayFloat64, ArrayFloa
     return times_s, measurements_body_t, reference_vectors_eci_t
 
 
+def _resolve_initial_magnetometer_bias(config: AEKFConfig) -> ArrayFloat64:
+    if (
+        config.initial_magnetometer_bias_sensor_t is not None
+        and config.initial_magnetometer_bias_body_t is not None
+    ):
+        raise ValueError(
+            "Use either initial_magnetometer_bias_sensor_t "
+            "or initial_magnetometer_bias_body_t, not both."
+        )
+    if config.initial_magnetometer_bias_sensor_t is not None:
+        return _as_vector(
+            config.initial_magnetometer_bias_sensor_t, 3, "initial_magnetometer_bias_sensor_t"
+        )
+    if config.initial_magnetometer_bias_body_t is not None:
+        return _as_vector(
+            config.initial_magnetometer_bias_body_t, 3, "initial_magnetometer_bias_body_t"
+        )
+
+    return _default_vector()
+
+
+def _resolve_sensor_axes(
+    sensor_axes_from_body: ArrayFloat64 | None, rotation_sensor_from_body: ArrayFloat64 | None
+) -> ArrayFloat64:
+    if sensor_axes_from_body is not None and rotation_sensor_from_body is not None:
+        raise ValueError("Use either sensor_axes_from_body or rotation_sensor_from_body, not both.")
+    if sensor_axes_from_body is not None:
+        return sensor_axes_from_body
+    if rotation_sensor_from_body is not None:
+        return rotation_sensor_from_body
+
+    return _default_sensor_axes()
+
+
 def _pack_state(
     quaternion_eci_from_body: ArrayFloat64,
     omega_body_radps: ArrayFloat64,
-    magnetometer_bias_body_t: ArrayFloat64,
+    magnetometer_bias_sensor_t: ArrayFloat64,
 ) -> ArrayFloat64:
     return np.concatenate(
         (
             normalize_quaternion(np.asarray(quaternion_eci_from_body, dtype=np.float64)),
             _as_vector(omega_body_radps, 3, "omega_body_radps"),
-            _as_vector(magnetometer_bias_body_t, 3, "magnetometer_bias_body_t"),
+            _as_vector(magnetometer_bias_sensor_t, 3, "magnetometer_bias_sensor_t"),
         )
     )
 
@@ -389,22 +521,98 @@ def _normalize_state(state: ArrayFloat64) -> ArrayFloat64:
     return normalized
 
 
-def _finite_difference_jacobian(
-    function: Callable[[ArrayFloat64], ArrayFloat64],
-    point: ArrayFloat64,
-    output_size: int,
-    step: float,
-) -> ArrayFloat64:
-    jacobian = np.empty((output_size, len(point)), dtype=np.float64)
-
-    for column in range(len(point)):
-        perturbation = np.zeros(len(point), dtype=np.float64)
-        perturbation[column] = step
-        upper = function(point + perturbation)
-        lower = function(point - perturbation)
-        jacobian[:, column] = (upper - lower) / (2.0 * step)
+def _state_normalization_jacobian(state: ArrayFloat64) -> ArrayFloat64:
+    jacobian = np.eye(STATE_SIZE, dtype=np.float64)
+    quaternion = _as_vector(state[QUATERNION_SLICE], 4, "quaternion")
+    jacobian[QUATERNION_SLICE, QUATERNION_SLICE] = _quaternion_normalization_jacobian(quaternion)
 
     return jacobian
+
+
+def _attitude_state_normalization_jacobian(attitude_state: ArrayFloat64) -> ArrayFloat64:
+    jacobian = np.eye(7, dtype=np.float64)
+    jacobian[:4, :4] = _quaternion_normalization_jacobian(attitude_state[:4])
+
+    return jacobian
+
+
+def _quaternion_normalization_jacobian(quaternion: ArrayFloat64) -> ArrayFloat64:
+    quaternion = _as_vector(quaternion, 4, "quaternion")
+    quaternion_norm = float(np.linalg.norm(quaternion))
+
+    if quaternion_norm == 0.0:
+        raise ValueError("Quaternion must have non-zero norm.")
+
+    return (
+        np.eye(4, dtype=np.float64) / quaternion_norm
+        - np.outer(quaternion, quaternion) / quaternion_norm**3
+    )
+
+
+def _quaternion_rate_jacobian_wrt_quaternion(omega_body_radps: ArrayFloat64) -> ArrayFloat64:
+    wx, wy, wz = _as_vector(omega_body_radps, 3, "omega_body_radps")
+
+    return 0.5 * np.array(
+        [[0.0, -wx, -wy, -wz], [wx, 0.0, wz, -wy], [wy, -wz, 0.0, wx], [wz, wy, -wx, 0.0]],
+        dtype=np.float64,
+    )
+
+
+def _quaternion_rate_jacobian_wrt_omega(quaternion: ArrayFloat64) -> ArrayFloat64:
+    qw, qx, qy, qz = normalize_quaternion(quaternion)
+
+    return 0.5 * np.array(
+        [[-qx, -qy, -qz], [qw, -qz, qy], [qz, qw, -qx], [-qy, qx, qw]], dtype=np.float64
+    )
+
+
+def _omega_derivative_jacobian(
+    omega_body_radps: ArrayFloat64, inertia_kg_m2: ArrayFloat64
+) -> ArrayFloat64:
+    omega = _as_vector(omega_body_radps, 3, "omega_body_radps")
+    inertia = _as_matrix(inertia_kg_m2, (3, 3), "inertia_kg_m2")
+    angular_momentum = inertia @ omega
+
+    return np.asarray(
+        np.linalg.solve(inertia, _skew(angular_momentum) - _skew(omega) @ inertia), dtype=np.float64
+    )
+
+
+def _rotation_transpose_vector_jacobian(
+    quaternion: ArrayFloat64, reference_vector_eci_t: ArrayFloat64
+) -> ArrayFloat64:
+    qw, qx, qy, qz = normalize_quaternion(quaternion)
+    bx, by, bz = _as_vector(reference_vector_eci_t, 3, "reference_vector_eci_t")
+
+    return np.array(
+        [
+            [
+                2.0 * qz * by - 2.0 * qy * bz,
+                2.0 * qy * by + 2.0 * qz * bz,
+                -4.0 * qy * bx + 2.0 * qx * by - 2.0 * qw * bz,
+                -4.0 * qz * bx + 2.0 * qw * by + 2.0 * qx * bz,
+            ],
+            [
+                -2.0 * qz * bx + 2.0 * qx * bz,
+                2.0 * qy * bx - 4.0 * qx * by + 2.0 * qw * bz,
+                2.0 * qx * bx + 2.0 * qz * bz,
+                -2.0 * qw * bx - 4.0 * qz * by + 2.0 * qy * bz,
+            ],
+            [
+                2.0 * qy * bx - 2.0 * qx * by,
+                2.0 * qz * bx - 2.0 * qw * by - 4.0 * qx * bz,
+                2.0 * qw * bx + 2.0 * qz * by - 4.0 * qy * bz,
+                2.0 * qx * bx + 2.0 * qy * by,
+            ],
+        ],
+        dtype=np.float64,
+    )
+
+
+def _skew(vector: ArrayFloat64) -> ArrayFloat64:
+    x, y, z = _as_vector(vector, 3, "vector")
+
+    return np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]], dtype=np.float64)
 
 
 def _as_vector(values: ArrayFloat64, length: int, name: str) -> ArrayFloat64:
@@ -421,6 +629,17 @@ def _as_matrix(values: ArrayFloat64, shape: tuple[int, int], name: str) -> Array
 
     if matrix.shape != shape:
         raise ValueError(f"{name} must have shape {shape}.")
+
+    return matrix
+
+
+def _as_sensor_axes_matrix(values: ArrayFloat64, name: str) -> ArrayFloat64:
+    matrix = _as_matrix(values, (3, 3), name)
+
+    if not np.all(np.isfinite(matrix)):
+        raise ValueError(f"{name} must contain finite values.")
+    if not np.allclose(matrix @ matrix.T, np.eye(3, dtype=np.float64), atol=1.0e-9):
+        raise ValueError(f"{name} must be orthonormal.")
 
     return matrix
 

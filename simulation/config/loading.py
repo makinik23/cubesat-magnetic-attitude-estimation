@@ -1,5 +1,6 @@
 """Configuration loading and validation for simulation inputs."""
 
+from numbers import Real
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from simulation.types import (
     AttitudeConfig,
     ArrayFloat64,
     ClassicalOrbitalElements,
+    MagnetometerConfig,
     SimulationConfig,
 )
 
@@ -48,6 +50,17 @@ def _get_string(section: dict[str, Any], key: str) -> str:
     return section[key]
 
 
+def _get_optional_int(section: dict[str, Any], key: str) -> int | None:
+    """Return an optional integer YAML value."""
+
+    value = section.get(key)
+
+    if value is None:
+        return None
+
+    return int(value)
+
+
 def _get_vector(section: dict[str, Any], key: str) -> ArrayFloat64:
     """Return a required numeric vector YAML value."""
 
@@ -71,6 +84,57 @@ def _validate_attitude_config(config: AttitudeConfig) -> None:
 
     if np.any(np.linalg.eigvalsh(config.inertia_kg_m2) <= 0.0):
         raise ValueError("Inertia matrix must be positive definite.")
+
+
+def _validate_rotation_matrix(matrix: ArrayFloat64, name: str) -> None:
+    """Validate a proper 3D rotation matrix."""
+
+    if matrix.shape != (3, 3):
+        raise ValueError(f"{name} must have shape (3, 3).")
+    if not np.allclose(matrix @ matrix.T, np.eye(3, dtype=np.float64), atol=1.0e-9):
+        raise ValueError(f"{name} must be orthonormal.")
+    if not np.isclose(np.linalg.det(matrix), 1.0, atol=1.0e-9):
+        raise ValueError(f"{name} must have determinant +1.")
+
+
+def _validate_sensor_axes_matrix(matrix: ArrayFloat64, name: str) -> None:
+    """Validate an orthonormal set of sensor sensitive axes."""
+
+    if matrix.shape != (3, 3):
+        raise ValueError(f"{name} must have shape (3, 3).")
+    if not np.all(np.isfinite(matrix)):
+        raise ValueError(f"{name} must contain finite values.")
+    if not np.allclose(matrix @ matrix.T, np.eye(3, dtype=np.float64), atol=1.0e-9):
+        raise ValueError(f"{name} must be orthonormal.")
+
+
+def _validate_sensor_positions_matrix(matrix: ArrayFloat64, name: str) -> None:
+    """Validate sensor positions in body-frame coordinates."""
+
+    if matrix.shape != (3, 3):
+        raise ValueError(f"{name} must have shape (3, 3).")
+    if not np.all(np.isfinite(matrix)):
+        raise ValueError(f"{name} must contain finite values.")
+
+
+def _validate_magnetometer_config(config: MagnetometerConfig) -> None:
+    """Validate magnetometer mounting and noise settings."""
+
+    if config.bias_sensor_t.shape != (3,):
+        raise ValueError("Magnetometer bias must have shape (3,).")
+    if isinstance(config.noise_std_t, Real):
+        if float(config.noise_std_t) < 0.0:
+            raise ValueError("Magnetometer noise standard deviation must be nonnegative.")
+    else:
+        noise_std_t = np.asarray(config.noise_std_t, dtype=np.float64)
+
+        if noise_std_t.shape != (3,):
+            raise ValueError("Magnetometer noise standard deviation must be scalar or shape (3,).")
+        if np.any(noise_std_t < 0.0):
+            raise ValueError("Magnetometer noise standard deviation must be nonnegative.")
+
+    _validate_sensor_axes_matrix(config.sensor_axes_from_body, "sensor_axes_from_body")
+    _validate_sensor_positions_matrix(config.positions_body_m, "positions_body_m")
 
 
 def create_orbit_from_yaml(path: Path = DEFAULT_ORBIT_CONFIG_PATH) -> ClassicalOrbitalElements:
@@ -133,6 +197,39 @@ def create_attitude_config_from_yaml(path: Path = DEFAULT_SATELLITE_CONFIG_PATH)
     return config
 
 
+def create_magnetometer_config_from_yaml(
+    path: Path = DEFAULT_SATELLITE_CONFIG_PATH,
+) -> MagnetometerConfig:
+    """
+    Create magnetometer mounting and noise settings from a YAML configuration file.
+    """
+
+    data = load_yaml_file(path)
+    magnetometer = _get_section(data, "magnetometer")
+
+    config = MagnetometerConfig(
+        bias_sensor_t=_get_vector(magnetometer, "bias_sensor_uT") * 1.0e-6,
+        noise_std_t=_get_float(magnetometer, "noise_std_uT") * 1.0e-6,
+        seed=_get_optional_int(magnetometer, "seed"),
+        sensor_axes_from_body=_get_matrix(
+            magnetometer,
+            (
+                "sensor_axes_from_body"
+                if "sensor_axes_from_body" in magnetometer
+                else "rotation_sensor_from_body"
+            ),
+        ),
+        positions_body_m=(
+            _get_matrix(magnetometer, "positions_body_m")
+            if "positions_body_m" in magnetometer
+            else np.zeros((3, 3), dtype=np.float64)
+        ),
+    )
+    _validate_magnetometer_config(config)
+
+    return config
+
+
 def create_default_orbit() -> ClassicalOrbitalElements:
     """
     Create the default LEO orbit from the YAML configuration.
@@ -165,3 +262,11 @@ def create_default_attitude_config() -> AttitudeConfig:
     """
 
     return create_attitude_config_from_yaml(DEFAULT_SATELLITE_CONFIG_PATH)
+
+
+def create_default_magnetometer_config() -> MagnetometerConfig:
+    """
+    Create default magnetometer settings from the YAML configuration.
+    """
+
+    return create_magnetometer_config_from_yaml(DEFAULT_SATELLITE_CONFIG_PATH)

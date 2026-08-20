@@ -9,6 +9,7 @@ import unittest
 import numpy as np
 from astropy.time import Time
 
+from simulation.config import create_default_magnetometer_config
 from simulation.io import build_results_dataframe
 from simulation.pipeline import (
     AEKF_OUTPUT_DIR,
@@ -56,6 +57,7 @@ def _simulation_result_with_kalman_estimate() -> SimulationResult:
             lat_deg=np.zeros(sample_count, dtype=np.float64),
             lon_deg=np.zeros(sample_count, dtype=np.float64),
             alt_m=np.zeros(sample_count, dtype=np.float64),
+            rotation_eci_from_lvlh=np.tile(np.eye(3, dtype=np.float64), (sample_count, 1, 1)),
         ),
         magnetic_field=MagneticFieldState(
             b_ned_nt=np.ones((sample_count, 3), dtype=np.float64),
@@ -84,6 +86,20 @@ def _simulation_result_with_kalman_estimate() -> SimulationResult:
 
 class KalmanOutputTests(unittest.TestCase):
     """Check exported Kalman estimate data and plot files."""
+
+    def test_default_magnetometers_are_axis_parallel_but_not_collinear(self) -> None:
+        config = create_default_magnetometer_config()
+        sensor_axes = config.sensor_axes_from_body
+        positions_body_m = config.positions_body_m
+
+        np.testing.assert_allclose(sensor_axes, np.eye(3, dtype=np.float64), atol=1e-12)
+        self.assertEqual(positions_body_m.shape, (3, 3))
+        self.assertTrue(np.isclose(positions_body_m[0, 2], 0.0))
+        self.assertTrue(np.isclose(positions_body_m[1, 0], 0.0))
+        self.assertTrue(np.isclose(positions_body_m[2, 1], 0.0))
+        self.assertGreater(abs(float(positions_body_m[0, 1])), 0.0)
+        self.assertGreater(abs(float(positions_body_m[1, 2])), 0.0)
+        self.assertGreater(abs(float(positions_body_m[2, 0])), 0.0)
 
     def test_results_dataframe_includes_kalman_state_columns(self) -> None:
         df = build_results_dataframe(_simulation_result_with_kalman_estimate())

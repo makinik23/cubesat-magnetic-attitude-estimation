@@ -62,7 +62,7 @@ class Magnetometer(Protocol):
     """Measures body-frame magnetic-field vectors."""
 
     def measure(self, b_body_t: ArrayFloat64) -> ArrayFloat64:
-        """Return magnetic-field measurements in body-frame coordinates."""
+        """Return magnetic-field measurements in sensor-frame coordinates."""
         raise NotImplementedError
 
 
