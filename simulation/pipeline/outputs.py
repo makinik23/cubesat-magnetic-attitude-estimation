@@ -17,7 +17,9 @@ from simulation.visualization import (
     animate_attitude_cube,
     plot_angular_velocity_body,
     plot_attitude_orientation,
+    plot_attitude_orientation_lvlh,
     plot_attitude_quaternion,
+    plot_attitude_quaternion_one_minus,
     plot_magnetic_field_body,
     plot_magnetic_field_body_norm,
     plot_magnetic_field_eci,
@@ -48,7 +50,9 @@ PLOT_OUTPUTS: tuple[tuple[str, Plotter], ...] = (
     ("magnetic_field_body_norm.png", plot_magnetic_field_body_norm),
     ("magnetometer_measurement.png", plot_magnetometer_measurement),
     ("attitude_orientation.png", plot_attitude_orientation),
+    ("attitude_orientation_lvlh.png", plot_attitude_orientation_lvlh),
     ("attitude_quaternion.png", plot_attitude_quaternion),
+    ("attitude_quaternion_one_minus.png", plot_attitude_quaternion_one_minus),
     ("angular_velocity_body.png", plot_angular_velocity_body),
 )
 

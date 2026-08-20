@@ -6,7 +6,12 @@ import unittest
 
 import numpy as np
 
-from simulation.frames import ecef_vectors_to_eci, eci_vectors_to_ecef, ned_to_ecef_vectors
+from simulation.frames import (
+    compute_rotation_eci_from_lvlh,
+    ecef_vectors_to_eci,
+    eci_vectors_to_ecef,
+    ned_to_ecef_vectors,
+)
 
 
 class FrameConversionTests(unittest.TestCase):
@@ -40,6 +45,27 @@ class FrameConversionTests(unittest.TestCase):
         round_trip = ecef_vectors_to_eci(vectors_ecef, time_utc)
 
         np.testing.assert_allclose(round_trip, vectors_eci, atol=1e-12)
+
+    def test_lvlh_axes_for_equatorial_prograde_orbit(self) -> None:
+        r_eci_m = np.array([[7000e3, 0.0, 0.0]], dtype=np.float64)
+        v_eci_mps = np.array([[0.0, 7500.0, 0.0]], dtype=np.float64)
+
+        rotation_eci_from_lvlh = compute_rotation_eci_from_lvlh(r_eci_m, v_eci_mps)
+
+        expected = np.array(
+            [[[0.0, 0.0, -1.0], [1.0, 0.0, 0.0], [0.0, -1.0, 0.0]]], dtype=np.float64
+        )
+        np.testing.assert_allclose(rotation_eci_from_lvlh, expected, atol=1e-12)
+
+    def test_lvlh_rotation_is_orthonormal_and_right_handed(self) -> None:
+        r_eci_m = np.array([[7000e3, 0.0, 0.0], [1000e3, -6500e3, 1500e3]], dtype=np.float64)
+        v_eci_mps = np.array([[0.0, 7500.0, 0.0], [7100.0, 900.0, -1200.0]], dtype=np.float64)
+
+        rotation_eci_from_lvlh = compute_rotation_eci_from_lvlh(r_eci_m, v_eci_mps)
+        orthogonality = np.einsum("nji,njk->nik", rotation_eci_from_lvlh, rotation_eci_from_lvlh)
+
+        np.testing.assert_allclose(orthogonality, np.tile(np.eye(3), (2, 1, 1)), atol=1e-12)
+        np.testing.assert_allclose(np.linalg.det(rotation_eci_from_lvlh), np.ones(2), atol=1e-12)
 
 
 if __name__ == "__main__":

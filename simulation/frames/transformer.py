@@ -23,6 +23,42 @@ def _stack_components(x: Any, y: Any, z: Any) -> np.ndarray:
     return np.column_stack((np.atleast_1d(x), np.atleast_1d(y), np.atleast_1d(z)))
 
 
+def _normalize_rows(vectors: np.ndarray, name: str) -> np.ndarray:
+    """Normalize row vectors and reject degenerate directions."""
+
+    norms = np.linalg.norm(vectors, axis=1)
+
+    if np.any(norms <= 0.0):
+        raise ValueError(f"{name} contains a zero-length vector.")
+
+    return vectors / norms[:, np.newaxis]
+
+
+def compute_rotation_eci_from_lvlh(r_eci_m: np.ndarray, v_eci_mps: np.ndarray) -> np.ndarray:
+    """
+    Compute LVLH-to-ECI rotation matrices from inertial position and velocity.
+
+    The LVLH convention is +X along-track, +Z nadir and +Y completing a
+    right-handed frame. Returned matrices map LVLH coordinates into ECI
+    coordinates, so each matrix column is one LVLH axis expressed in ECI.
+    """
+
+    r_eci = np.asarray(r_eci_m, dtype=np.float64)
+    v_eci = np.asarray(v_eci_mps, dtype=np.float64)
+
+    if r_eci.shape != v_eci.shape or r_eci.ndim != 2 or r_eci.shape[1] != 3:
+        raise ValueError("r_eci_m and v_eci_mps must both have shape (N, 3).")
+
+    radius_direction_eci = _normalize_rows(r_eci, "r_eci_m")
+    angular_momentum_direction_eci = _normalize_rows(np.cross(r_eci, v_eci), "r_eci_m x v_eci_mps")
+
+    z_lvlh_eci = -radius_direction_eci
+    y_lvlh_eci = -angular_momentum_direction_eci
+    x_lvlh_eci = _normalize_rows(np.cross(y_lvlh_eci, z_lvlh_eci), "x LVLH axis")
+
+    return np.stack((x_lvlh_eci, y_lvlh_eci, z_lvlh_eci), axis=2)
+
+
 def eci_to_ecef_positions(r_eci_m: np.ndarray, time_utc: Any) -> np.ndarray:
     """
     Convert ECI position vectors to ECEF positions via pymap3d.
@@ -68,8 +104,15 @@ def compute_frame_state(orbit: OrbitState) -> FrameState:
 
     r_ecef_m = eci_to_ecef_positions(orbit.r_eci_m, orbit.t_utc)
     lat_deg, lon_deg, alt_m = ecef_to_geodetic(r_ecef_m)
+    rotation_eci_from_lvlh = compute_rotation_eci_from_lvlh(orbit.r_eci_m, orbit.v_eci_mps)
 
-    return FrameState(r_ecef_m=r_ecef_m, lat_deg=lat_deg, lon_deg=lon_deg, alt_m=alt_m)
+    return FrameState(
+        r_ecef_m=r_ecef_m,
+        lat_deg=lat_deg,
+        lon_deg=lon_deg,
+        alt_m=alt_m,
+        rotation_eci_from_lvlh=rotation_eci_from_lvlh,
+    )
 
 
 def ned_to_ecef_vectors(b_ned: np.ndarray, lat_deg: np.ndarray, lon_deg: np.ndarray) -> np.ndarray:

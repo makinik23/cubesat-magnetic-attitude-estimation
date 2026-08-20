@@ -7,6 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from simulation.attitude import rotation_matrix_to_zyx_euler
 from simulation.types import SimulationResult
 
 RESULT_COLUMNS = [
@@ -54,6 +55,21 @@ RESULT_COLUMNS = [
     "yaw_eci_from_body_deg",
     "pitch_eci_from_body_deg",
     "roll_eci_from_body_deg",
+    "yaw_lvlh_from_body_rad",
+    "pitch_lvlh_from_body_rad",
+    "roll_lvlh_from_body_rad",
+    "yaw_lvlh_from_body_deg",
+    "pitch_lvlh_from_body_deg",
+    "roll_lvlh_from_body_deg",
+    "R_eci_from_lvlh_11",
+    "R_eci_from_lvlh_12",
+    "R_eci_from_lvlh_13",
+    "R_eci_from_lvlh_21",
+    "R_eci_from_lvlh_22",
+    "R_eci_from_lvlh_23",
+    "R_eci_from_lvlh_31",
+    "R_eci_from_lvlh_32",
+    "R_eci_from_lvlh_33",
     "Bx_body_T",
     "By_body_T",
     "Bz_body_T",
@@ -76,6 +92,19 @@ RESULT_COLUMNS = [
 ]
 
 
+def _compute_euler_lvlh_from_body(result: SimulationResult) -> np.ndarray:
+    """Compute ZYX Euler angles for body attitude relative to LVLH."""
+
+    rotation_lvlh_from_body = np.einsum(
+        "nji,njk->nik", result.frame.rotation_eci_from_lvlh, result.attitude.rotation_eci_from_body
+    )
+
+    return np.array(
+        [rotation_matrix_to_zyx_euler(rotation) for rotation in rotation_lvlh_from_body],
+        dtype=np.float64,
+    )
+
+
 def build_results_dataframe(result: SimulationResult) -> pd.DataFrame:
     """Combine simulation states into a tabular result for export and plotting."""
 
@@ -85,6 +114,7 @@ def build_results_dataframe(result: SimulationResult) -> pd.DataFrame:
     attitude = result.attitude
     b_body_t = result.b_body_t
     b_magnetometer_t = result.b_magnetometer_t
+    euler_lvlh_from_body_rad = _compute_euler_lvlh_from_body(result)
 
     df = pd.DataFrame(
         {
@@ -121,6 +151,9 @@ def build_results_dataframe(result: SimulationResult) -> pd.DataFrame:
             "yaw_eci_from_body_rad": attitude.euler_zyx_rad[:, 0],
             "pitch_eci_from_body_rad": attitude.euler_zyx_rad[:, 1],
             "roll_eci_from_body_rad": attitude.euler_zyx_rad[:, 2],
+            "yaw_lvlh_from_body_rad": euler_lvlh_from_body_rad[:, 0],
+            "pitch_lvlh_from_body_rad": euler_lvlh_from_body_rad[:, 1],
+            "roll_lvlh_from_body_rad": euler_lvlh_from_body_rad[:, 2],
             "Bx_body_T": b_body_t[:, 0],
             "By_body_T": b_body_t[:, 1],
             "Bz_body_T": b_body_t[:, 2],
@@ -141,10 +174,17 @@ def build_results_dataframe(result: SimulationResult) -> pd.DataFrame:
     df["yaw_eci_from_body_deg"] = np.rad2deg(attitude.euler_zyx_rad[:, 0])
     df["pitch_eci_from_body_deg"] = np.rad2deg(attitude.euler_zyx_rad[:, 1])
     df["roll_eci_from_body_deg"] = np.rad2deg(attitude.euler_zyx_rad[:, 2])
+    df["yaw_lvlh_from_body_deg"] = np.rad2deg(euler_lvlh_from_body_rad[:, 0])
+    df["pitch_lvlh_from_body_deg"] = np.rad2deg(euler_lvlh_from_body_rad[:, 1])
+    df["roll_lvlh_from_body_deg"] = np.rad2deg(euler_lvlh_from_body_rad[:, 2])
     df["q_eci_from_body_norm"] = np.linalg.norm(attitude.q_eci_from_body, axis=1)
     df["B_body_norm_T"] = np.linalg.norm(b_body_t, axis=1)
     df["B_magnetometer_norm_T"] = np.linalg.norm(b_magnetometer_t, axis=1)
     df["RT_R_minus_I_fro"] = np.linalg.norm(attitude.rt_r_minus_i, axis=(1, 2))
+
+    for row in range(3):
+        for col in range(3):
+            df[f"R_eci_from_lvlh_{row + 1}{col + 1}"] = frame.rotation_eci_from_lvlh[:, row, col]
 
     for row in range(3):
         for col in range(3):
