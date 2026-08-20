@@ -56,6 +56,23 @@ class AttitudeConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class MagnetometerConfig:
+    """Three-axis magnetometer mounting and noise settings."""
+
+    bias_sensor_t: ArrayFloat64
+    noise_std_t: float | ArrayFloat64
+    seed: int | None
+    sensor_axes_from_body: ArrayFloat64
+    positions_body_m: ArrayFloat64
+
+    @property
+    def rotation_sensor_from_body(self) -> ArrayFloat64:
+        """Deprecated alias for the sensor-axis projection matrix."""
+
+        return self.sensor_axes_from_body
+
+
+@dataclass(frozen=True, slots=True)
 class OrbitState:
     """Orbit propagation results in ECI coordinates."""
 
@@ -98,6 +115,35 @@ class AttitudeState:
 
 
 @dataclass(frozen=True, slots=True)
+class KalmanFilterInput:
+    """
+    Signals shared by Kalman-family attitude estimators.
+
+    Measurements are magnetometer-frame magnetic-field samples. The field name
+    is kept for compatibility with existing call sites. Reference vectors are
+    the corresponding inertial magnetic-field model samples. Angular rates are
+    optional known propagation inputs for filters that use an external rate
+    source.
+    """
+
+    t_s: ArrayFloat64
+    measurements_body_t: ArrayFloat64
+    reference_vectors_eci_t: ArrayFloat64
+    angular_rate_body_radps: ArrayFloat64 | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class KalmanFilterEstimate:
+    """State and covariance trajectory returned by a Kalman-family estimator."""
+
+    t_s: ArrayFloat64
+    state: ArrayFloat64
+    covariance: ArrayFloat64
+    innovation: ArrayFloat64 | None = None
+    innovation_covariance: ArrayFloat64 | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class SimulationResult:
     """Complete simulation result before tabular export or plotting."""
 
@@ -107,3 +153,4 @@ class SimulationResult:
     attitude: AttitudeState
     b_body_t: ArrayFloat64
     b_magnetometer_t: ArrayFloat64
+    kalman_estimate: KalmanFilterEstimate | None = None

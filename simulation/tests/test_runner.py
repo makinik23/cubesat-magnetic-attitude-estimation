@@ -14,6 +14,8 @@ from simulation.types import (
     AttitudeState,
     ClassicalOrbitalElements,
     FrameState,
+    KalmanFilterEstimate,
+    KalmanFilterInput,
     MagneticFieldState,
     OrbitState,
     SimulationConfig,
@@ -55,6 +57,13 @@ class SimulationRunnerTests(unittest.TestCase):
         )
         b_body_t = np.ones((2, 3), dtype=np.float64) * 4e-6
         b_magnetometer_t = np.ones((2, 3), dtype=np.float64) * 5e-6
+        kalman_estimate = KalmanFilterEstimate(
+            t_s=orbit_state.t_s,
+            state=np.zeros((2, 4), dtype=np.float64),
+            covariance=np.tile(np.eye(4, dtype=np.float64), (2, 1, 1)),
+            innovation=np.zeros((2, 3), dtype=np.float64),
+            innovation_covariance=np.tile(np.eye(3, dtype=np.float64), (2, 1, 1)),
+        )
 
         class OrbitStrategy:
             def propagate(
@@ -95,6 +104,15 @@ class SimulationRunnerTests(unittest.TestCase):
                 calls.append("magnetometer")
                 return b_magnetometer_t
 
+        class KalmanStrategy:
+            def estimate(self, inputs: KalmanFilterInput) -> KalmanFilterEstimate:
+                np.testing.assert_allclose(inputs.t_s, orbit_state.t_s)
+                np.testing.assert_allclose(inputs.measurements_body_t, b_magnetometer_t)
+                np.testing.assert_allclose(inputs.reference_vectors_eci_t, magnetic_state.b_eci_t)
+                test_case.assertIsNone(inputs.angular_rate_body_radps)
+                calls.append("kalman")
+                return kalman_estimate
+
         elements = ClassicalOrbitalElements(
             semi_major_axis=7_000_000.0 * u.m,
             eccentricity=0.0 * u.one,
@@ -122,15 +140,19 @@ class SimulationRunnerTests(unittest.TestCase):
             attitude_propagator=AttitudeStrategy(),
             body_field_projector=BodyProjector(),
             magnetometer_model=MagnetometerStrategy(),
+            kalman_filter=KalmanStrategy(),
         )
 
         result = runner.run(elements, simulation_config, attitude_config)
 
-        self.assertEqual(calls, ["orbit", "frame", "magnetic", "attitude", "body", "magnetometer"])
+        self.assertEqual(
+            calls, ["orbit", "frame", "magnetic", "attitude", "body", "magnetometer", "kalman"]
+        )
         self.assertIs(result.orbit, orbit_state)
         self.assertIs(result.frame, frame_state)
         self.assertIs(result.magnetic_field, magnetic_state)
         self.assertIs(result.attitude, attitude_state)
+        self.assertIs(result.kalman_estimate, kalman_estimate)
         np.testing.assert_allclose(result.b_body_t, b_body_t)
         np.testing.assert_allclose(result.b_magnetometer_t, b_magnetometer_t)
 

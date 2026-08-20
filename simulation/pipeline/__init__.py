@@ -1,25 +1,47 @@
 """Pipeline orchestration."""
 
 from simulation.pipeline.outputs import (
+    AEKF_OUTPUT_DIR,
     ANIMATION_OUTPUTS,
+    ATTITUDE_AEKF_OUTPUT_DIR,
+    GENERAL_PLOT_OUTPUTS,
+    KALMAN_CSV_FILENAME,
+    KALMAN_PLOT_OUTPUTS,
+    LEGACY_KALMAN_OUTPUT_FILENAMES,
     PLOT_OUTPUTS,
+    build_attitude_aekf_dataframe,
+    cleanup_legacy_kalman_outputs,
     create_default_runner,
     load_default_inputs,
     print_saved_outputs,
     run_orbit_pipeline,
     save_animation_outputs,
+    save_general_plot_outputs,
+    save_kalman_plot_outputs,
+    save_kalman_results,
     save_plot_outputs,
 )
 from simulation.pipeline.runner import SimulationRunner
 
 __all__ = [
     "ANIMATION_OUTPUTS",
+    "ATTITUDE_AEKF_OUTPUT_DIR",
+    "AEKF_OUTPUT_DIR",
+    "GENERAL_PLOT_OUTPUTS",
+    "KALMAN_CSV_FILENAME",
+    "KALMAN_PLOT_OUTPUTS",
+    "LEGACY_KALMAN_OUTPUT_FILENAMES",
     "PLOT_OUTPUTS",
     "SimulationRunner",
+    "build_attitude_aekf_dataframe",
+    "cleanup_legacy_kalman_outputs",
     "create_default_runner",
     "load_default_inputs",
     "print_saved_outputs",
     "run_orbit_pipeline",
     "save_animation_outputs",
+    "save_general_plot_outputs",
+    "save_kalman_plot_outputs",
+    "save_kalman_results",
     "save_plot_outputs",
 ]
