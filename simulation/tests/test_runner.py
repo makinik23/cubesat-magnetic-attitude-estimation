@@ -38,6 +38,7 @@ class SimulationRunnerTests(unittest.TestCase):
             lat_deg=np.zeros(2, dtype=np.float64),
             lon_deg=np.zeros(2, dtype=np.float64),
             alt_m=np.zeros(2, dtype=np.float64),
+            rotation_eci_from_lvlh=np.tile(np.eye(3, dtype=np.float64), (2, 1, 1)),
         )
         magnetic_state = MagneticFieldState(
             b_ned_nt=np.ones((2, 3), dtype=np.float64),

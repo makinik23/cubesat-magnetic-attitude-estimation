@@ -42,6 +42,7 @@ def _load_reference_injections() -> list[dict[str, object]]:
 
 def _reference_orbit_state(injections: list[dict[str, object]]) -> OrbitState:
     r_eci_m = np.array([injection["r_eci_given"] for injection in injections], dtype=float) * 1000.0
+    v_eci_mps = np.gradient(r_eci_m, axis=0)
     times_utc = Time(
         [
             datetime.strptime(str(injection["epoch"]), "%d-%b-%Y %H:%M:%S")
@@ -54,7 +55,7 @@ def _reference_orbit_state(injections: list[dict[str, object]]) -> OrbitState:
         t_s=np.arange(len(injections), dtype=float),
         t_utc=times_utc,
         r_eci_m=r_eci_m,
-        v_eci_mps=np.zeros_like(r_eci_m),
+        v_eci_mps=v_eci_mps,
     )
 
 

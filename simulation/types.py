@@ -67,12 +67,13 @@ class OrbitState:
 
 @dataclass(frozen=True, slots=True)
 class FrameState:
-    """Position and geodetic data derived from the orbit state."""
+    """Position and frame data derived from the orbit state."""
 
     r_ecef_m: ArrayFloat64
     lat_deg: ArrayFloat64
     lon_deg: ArrayFloat64
     alt_m: ArrayFloat64
+    rotation_eci_from_lvlh: ArrayFloat64
 
 
 @dataclass(frozen=True, slots=True)

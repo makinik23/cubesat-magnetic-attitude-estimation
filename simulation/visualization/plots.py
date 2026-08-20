@@ -239,6 +239,23 @@ def plot_attitude_orientation(df: pd.DataFrame, output_dir: Path) -> None:
     )
 
 
+def plot_attitude_orientation_lvlh(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot body orientation angles relative to the LVLH frame."""
+
+    _plot_time_series(
+        df,
+        output_dir,
+        "attitude_orientation_lvlh.png",
+        [
+            ("yaw_lvlh_from_body_deg", "yaw LVLH", 1.0),
+            ("pitch_lvlh_from_body_deg", "pitch LVLH", 1.0),
+            ("roll_lvlh_from_body_deg", "roll LVLH", 1.0),
+        ],
+        "Angle [deg]",
+        "Body orientation relative to LVLH",
+    )
+
+
 def plot_attitude_quaternion(df: pd.DataFrame, output_dir: Path) -> None:
     """Plot attitude quaternion components and norm over time."""
 
@@ -264,6 +281,33 @@ def plot_attitude_quaternion(df: pd.DataFrame, output_dir: Path) -> None:
     axes[1].legend()
 
     _save_figure(fig, output_dir, "attitude_quaternion.png")
+
+
+def plot_attitude_quaternion_one_minus(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot one minus attitude quaternion components and norm over time."""
+
+    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(8, 6))
+
+    for column, label in [
+        ("q_eci_from_body_w", "1 - q_w"),
+        ("q_eci_from_body_x", "1 - q_x"),
+        ("q_eci_from_body_y", "1 - q_y"),
+        ("q_eci_from_body_z", "1 - q_z"),
+    ]:
+        axes[0].plot(df["t_s"], 1.0 - df[column], label=label)
+
+    axes[0].set_ylabel("1 - quaternion component [-]")
+    axes[0].set_title("One minus attitude quaternion over time")
+    axes[0].grid(True)
+    axes[0].legend()
+
+    axes[1].plot(df["t_s"], 1.0 - df["q_eci_from_body_norm"], label="1 - |q|")
+    axes[1].set_xlabel("Time [s]")
+    axes[1].set_ylabel("1 - quaternion norm [-]")
+    axes[1].grid(True)
+    axes[1].legend()
+
+    _save_figure(fig, output_dir, "attitude_quaternion_one_minus.png")
 
 
 def plot_angular_velocity_body(df: pd.DataFrame, output_dir: Path) -> None:
