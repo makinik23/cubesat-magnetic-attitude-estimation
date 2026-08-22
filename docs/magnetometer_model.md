@@ -11,25 +11,29 @@ $$
   \mathbf{B}_\mathrm{eci}
 $$
 
-The magnetometer model turns this ideal body-frame vector into a sensor
-measurement. It does not recompute the magnetic field; it only adds a simple
-sensor error model.
+The magnetometer model turns this ideal body-frame vector into a sensor-frame
+measurement. It does not recompute the magnetic field; it applies the configured
+sensor axes, stores the configured sensor positions, and adds a simple sensor
+error model.
 
 ## Measurement Equation
 
 For each output sample $k$:
 
 $$
-\mathbf{B}_{\mathrm{mag},k}
-= \mathbf{B}_{\mathrm{body},k}
-  + \mathbf{b}_\mathrm{body}
+\mathbf{B}_{\mathrm{sensor},k}
+= \mathbf{C}_{\mathrm{sensor}\leftarrow\mathrm{body}}\,
+  \mathbf{B}_{\mathrm{body},k}
+  + \mathbf{b}_\mathrm{sensor}
   + \boldsymbol{\eta}_k
 $$
 
 where:
 
 - $\mathbf{B}_{\mathrm{body},k}$ is the ideal body-frame magnetic field in tesla,
-- $\mathbf{b}_\mathrm{body}$ is a constant 3-axis bias in tesla,
+- $\mathbf{C}_{\mathrm{sensor}\leftarrow\mathrm{body}}$ maps body components to
+  the sensor channel axes,
+- $\mathbf{b}_\mathrm{sensor}$ is a constant 3-axis bias in the sensor frame,
 - $\boldsymbol{\eta}_k$ is zero-mean Gaussian noise in tesla.
 
 The noise model is:
@@ -59,9 +63,11 @@ The default implementation is `MagnetometerModel`.
 Constructor parameters:
 
 ```text
-bias_body_t  shape (3,), units T
-noise_std_t  scalar or shape (3,), units T
-seed         optional RNG seed
+bias_sensor_t              shape (3,), units T
+noise_std_t                scalar or shape (3,), units T
+seed                       optional RNG seed
+rotation_sensor_from_body  shape (3, 3), dimensionless
+positions_body_m           shape (3, 3), units m
 ```
 
 The model implements the `Magnetometer` interface through:
@@ -76,8 +82,31 @@ measure(b_body_t) -> b_magnetometer_t
 magnetometer_model: Magnetometer
 ```
 
-This keeps the runner independent of the concrete sensor implementation. The
-default runner uses `MagnetometerModel()` with zero bias and zero noise.
+This keeps the runner independent of the concrete sensor implementation.
+
+## Current Geometry
+
+The current default configuration uses three orthogonal sensor axes parallel to
+the spacecraft body axes:
+
+```text
+rotation_sensor_from_body = I
+```
+
+The three physical sensor positions are offset from the body-frame origin:
+
+```text
+X-channel sensor: [ 0.02,  0.03,  0.00] m
+Y-channel sensor: [ 0.00, -0.02,  0.03] m
+Z-channel sensor: [-0.03,  0.00, -0.02] m
+```
+
+Thus the channels are orthogonal and body-parallel, but the sensors are not
+located on the body-axis centerlines. The positions are stored and validated.
+They do not yet alter the measurement because the current magnetic-field model
+provides one uniform body-frame field vector at the spacecraft center. A
+field-gradient model or a local magnetic-disturbance model would be needed for
+the translations to change the measured values.
 
 ## Configuring Visible Noise
 
@@ -96,9 +125,15 @@ from simulation.sensors import MagnetometerModel
 
 runner = SimulationRunner(
     magnetometer_model=MagnetometerModel(
-        bias_body_t=np.array([0.3e-6, -0.2e-6, 0.1e-6]),
+        bias_sensor_t=np.array([0.3e-6, -0.2e-6, 0.1e-6]),
         noise_std_t=1.0e-6,
         seed=42,
+        rotation_sensor_from_body=np.eye(3),
+        positions_body_m=np.array([
+            [0.02, 0.03, 0.0],
+            [0.0, -0.02, 0.03],
+            [-0.03, 0.0, -0.02],
+        ]),
     )
 )
 ```
@@ -122,4 +157,4 @@ The pipeline also writes:
 magnetometer_measurement.png
 ```
 
-This plot shows the three measured body-frame components over time.
+This plot shows the three measured sensor-frame components over time.

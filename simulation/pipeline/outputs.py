@@ -24,6 +24,7 @@ from simulation.visualization import (
     plot_attitude_quaternion,
     plot_attitude_quaternion_one_minus,
     plot_kalman_angular_velocity,
+    plot_kalman_innovation_consistency,
     plot_kalman_magnetometer_bias,
     plot_kalman_state_covariance,
     plot_kalman_state_error,
@@ -82,6 +83,7 @@ KALMAN_PLOT_OUTPUTS: tuple[PlotOutput, ...] = (
     ("kalman_state_covariance.png", plot_kalman_state_covariance),
     ("kalman_angular_velocity.png", plot_kalman_angular_velocity),
     ("kalman_magnetometer_bias.png", plot_kalman_magnetometer_bias),
+    ("kalman_innovation_consistency.png", plot_kalman_innovation_consistency),
 )
 LEGACY_KALMAN_OUTPUT_FILENAMES = tuple(filename for filename, _ in KALMAN_PLOT_OUTPUTS) + (
     "kalman_gyro_bias.png",

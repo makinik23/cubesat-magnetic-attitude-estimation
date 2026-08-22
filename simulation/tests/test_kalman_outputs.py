@@ -30,6 +30,7 @@ from simulation.types import (
 )
 from simulation.visualization import (
     plot_kalman_angular_velocity,
+    plot_kalman_innovation_consistency,
     plot_kalman_magnetometer_bias,
     plot_kalman_state_covariance,
     plot_kalman_state_error,
@@ -109,6 +110,7 @@ class KalmanOutputTests(unittest.TestCase):
         np.testing.assert_allclose(df["q_kalman_error_angle_deg"], np.zeros(2))
         np.testing.assert_allclose(df["sigma_kalman_w"], np.ones(2) * 1e-2)
         np.testing.assert_allclose(df["innovation_kalman_norm_T"], np.zeros(2))
+        np.testing.assert_allclose(df["nis_kalman"], np.zeros(2))
         np.testing.assert_allclose(df["omega_kalman_x_radps"], np.ones(2) * 0.01)
         np.testing.assert_allclose(df["mag_bias_kalman_z_T"], np.ones(2) * 0.3e-6)
         np.testing.assert_allclose(df["mag_bias_kalman_z_uT"], np.ones(2) * 0.3)
@@ -123,12 +125,14 @@ class KalmanOutputTests(unittest.TestCase):
             plot_kalman_state_covariance(df, output_dir)
             plot_kalman_angular_velocity(df, output_dir)
             plot_kalman_magnetometer_bias(df, output_dir)
+            plot_kalman_innovation_consistency(df, output_dir)
 
             self.assertTrue((output_dir / "kalman_state_quaternion.png").is_file())
             self.assertTrue((output_dir / "kalman_state_error.png").is_file())
             self.assertTrue((output_dir / "kalman_state_covariance.png").is_file())
             self.assertTrue((output_dir / "kalman_angular_velocity.png").is_file())
             self.assertTrue((output_dir / "kalman_magnetometer_bias.png").is_file())
+            self.assertTrue((output_dir / "kalman_innovation_consistency.png").is_file())
 
     def test_save_plot_outputs_routes_kalman_plots_to_aekf_subdirectory(self) -> None:
         df = build_results_dataframe(_simulation_result_with_kalman_estimate())

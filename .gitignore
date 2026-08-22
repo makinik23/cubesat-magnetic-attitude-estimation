@@ -5,3 +5,6 @@ venv/
 notes.txt
 simulation/docs/
 learning/
+
+# LaTeX artifacts accidentally emitted from repository root.
+/project_state_math.*
