@@ -9,6 +9,7 @@ from matplotlib import animation
 import matplotlib.pyplot as plt
 import pandas as pd
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from scipy.stats import chi2
 
 from simulation.attitude import quaternion_to_rotation_matrix
 
@@ -206,7 +207,7 @@ def plot_magnetic_field_body_norm(df: pd.DataFrame, output_dir: Path) -> None:
 
 
 def plot_magnetometer_measurement(df: pd.DataFrame, output_dir: Path) -> None:
-    """Plot magnetometer measurements in body coordinates."""
+    """Plot magnetometer measurements in sensor coordinates."""
 
     _plot_time_series(
         df,
@@ -218,7 +219,7 @@ def plot_magnetometer_measurement(df: pd.DataFrame, output_dir: Path) -> None:
             ("Bz_magnetometer_T", "Bz measured", 1.0e6),
         ],
         "Magnetometer [uT]",
-        "Magnetometer measurement in body",
+        "Magnetometer measurement in sensor frame",
     )
 
 
@@ -461,6 +462,31 @@ def plot_kalman_magnetometer_bias(df: pd.DataFrame, output_dir: Path) -> None:
         "Magnetometer bias [uT]",
         "Kalman magnetometer-bias estimate",
     )
+
+
+def plot_kalman_innovation_consistency(df: pd.DataFrame, output_dir: Path) -> None:
+    """Plot normalized innovation squared against chi-square bounds."""
+
+    required_columns = ["nis_kalman"]
+
+    if not _has_finite_columns(df, required_columns):
+        return
+
+    lower_95 = float(chi2.ppf(0.025, df=3))
+    upper_95 = float(chi2.ppf(0.975, df=3))
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.plot(df["t_s"], df["nis_kalman"], label="NIS")
+    ax.axhline(3.0, color="tab:green", linestyle="--", label="expected mean")
+    ax.axhline(lower_95, color="tab:orange", linestyle=":", label="95% lower")
+    ax.axhline(upper_95, color="tab:red", linestyle=":", label="95% upper")
+    ax.set_xlabel("Time [s]")
+    ax.set_ylabel("NIS [-]")
+    ax.set_title("Kalman innovation consistency")
+    ax.grid(True)
+    ax.legend()
+
+    _save_figure(fig, output_dir, "kalman_innovation_consistency.png")
 
 
 def plot_angular_velocity_body(df: pd.DataFrame, output_dir: Path) -> None:
