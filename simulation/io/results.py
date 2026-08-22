@@ -137,6 +137,7 @@ RESULT_COLUMNS = [
     "innovation_kalman_y_T",
     "innovation_kalman_z_T",
     "innovation_kalman_norm_T",
+    "nis_kalman",
 ]
 
 KALMAN_RESULT_COLUMNS = RESULT_COLUMNS[RESULT_COLUMNS.index("q_kalman_w") :]
@@ -346,6 +347,17 @@ def _add_kalman_columns(df: pd.DataFrame, result: SimulationResult) -> None:
         df["innovation_kalman_y_T"] = innovation[:, 1]
         df["innovation_kalman_z_T"] = innovation[:, 2]
         df["innovation_kalman_norm_T"] = np.linalg.norm(innovation, axis=1)
+
+        if estimate.innovation_covariance is not None:
+            innovation_covariance = np.asarray(estimate.innovation_covariance, dtype=np.float64)
+
+            if innovation_covariance.shape != (sample_count, 3, 3):
+                raise ValueError("Kalman innovation covariance must have shape (N, 3, 3).")
+
+            normalized_innovation = np.linalg.solve(
+                innovation_covariance, innovation[:, :, np.newaxis]
+            )[:, :, 0]
+            df["nis_kalman"] = np.einsum("ij,ij->i", innovation, normalized_innovation)
 
 
 def save_results(df: pd.DataFrame, output_dir: Path) -> Path:

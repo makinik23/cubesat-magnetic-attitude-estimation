@@ -49,7 +49,6 @@ class AttitudeConfig:
     inertia_kg_m2: ArrayFloat64
     initial_quaternion_eci_from_body: ArrayFloat64
     initial_omega_body_radps: ArrayFloat64
-    torque_body_nm: ArrayFloat64
     integration_method: str
     rtol: float
     atol: float

@@ -43,6 +43,8 @@ lint = [
 ]
 unit-tests = "python -m unittest discover simulation/tests"
 test = "unit-tests"
+validate-aekf = "python -m simulation.validation.aekf {args}"
+build-state-math = "latexmk -pdf simulation/docs/project_state_math.tex"
 check = [
     "black --check .",
     "flake8 .",

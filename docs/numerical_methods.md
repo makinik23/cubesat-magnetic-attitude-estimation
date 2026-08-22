@@ -75,6 +75,10 @@ Use these quantities to detect numerical problems:
 
 - Orbit propagation currently uses a two-body model.
 - ECI vectors from `poliastro` are treated as GCRS-like for this milestone.
-- The attitude model uses a constant body-frame torque, zero by default.
-- The default magnetometer has zero bias and zero noise unless a configured
-  `MagnetometerModel` is injected into the simulation runner.
+- The attitude model is torque-free and uses Euler rigid-body dynamics without
+  external moments.
+- `MagnetometerModel` itself defaults to zero bias and zero noise, but the
+  default pipeline injects the YAML-configured sensor bias and noise.
+- The default 10-state AEKF assumes the torque-free rigid-body model is trusted;
+  its angular-rate process noise is tuned to a standard deviation of
+  `1e-5 deg/s` per sample.

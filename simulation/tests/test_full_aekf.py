@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from simulation.estimation import AEKF, AEKFConfig
+from simulation.estimation import AEKF, AEKFConfig, DEFAULT_OMEGA_PROCESS_NOISE_STD_DEGPS
 from simulation.helpers import normalize_quaternion
 from simulation.types import KalmanFilterInput
 
@@ -86,6 +86,18 @@ class FullAEKFTests(unittest.TestCase):
                 )
             )
 
+    def test_default_process_noise_uses_tuned_omega_random_walk(self) -> None:
+        aekf = AEKF()
+        process_noise_diagonal = np.diag(aekf.process_noise)
+
+        expected_omega_variance = np.deg2rad(DEFAULT_OMEGA_PROCESS_NOISE_STD_DEGPS) ** 2
+
+        np.testing.assert_allclose(
+            process_noise_diagonal[4:7],
+            np.full(3, expected_omega_variance, dtype=np.float64),
+            rtol=1e-12,
+        )
+
     def test_predict_projects_covariance_after_quaternion_normalization(self) -> None:
         process_noise = np.eye(10, dtype=np.float64) * 1e-8
         aekf = AEKF(AEKFConfig(process_noise=process_noise))
@@ -125,12 +137,7 @@ class FullAEKFTests(unittest.TestCase):
         )
 
     def test_state_transition_jacobian_matches_finite_difference(self) -> None:
-        aekf = AEKF(
-            AEKFConfig(
-                inertia_kg_m2=np.diag([0.0409, 0.0403, 0.0073]),
-                torque_body_nm=np.array([0.0, 0.0, 0.0], dtype=np.float64),
-            )
-        )
+        aekf = AEKF(AEKFConfig(inertia_kg_m2=np.diag([0.0409, 0.0403, 0.0073])))
         state = np.array(
             [0.9, 0.2, -0.1, 0.35, 0.003, -0.004, 0.002, 0.1e-6, -0.2e-6, 0.05e-6], dtype=np.float64
         )
