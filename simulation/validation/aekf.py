@@ -21,7 +21,7 @@ from simulation.config import (
     create_default_orbit,
     create_default_simulation_config,
 )
-from simulation.estimation import AEKF, AEKFConfig
+from simulation.estimation import AEKF, AEKFConfig, DEFAULT_OMEGA_PROCESS_NOISE_STD_DEGPS
 from simulation.helpers import normalize_quaternion
 from simulation.io import build_results_dataframe, save_results
 from simulation.pipeline import (
@@ -47,6 +47,7 @@ from simulation.types import (
 DEFAULT_VALIDATION_OUTPUT_DIR = Path("outputs") / "validation"
 ATTITUDE_SETTLING_THRESHOLDS_DEG = (2.0, 1.5, 1.0)
 BIAS_SETTLING_THRESHOLDS_UT = (0.3, 0.2, 0.15, 0.1)
+OMEGA_SETTLING_THRESHOLD_DEGPS = 0.005
 NIS_DIMENSION = 3
 
 
@@ -230,7 +231,6 @@ def run_long_aekf(
                 initial_quaternion_eci_from_body=attitude_config.initial_quaternion_eci_from_body,
                 initial_omega_body_radps=attitude_config.initial_omega_body_radps,
                 inertia_kg_m2=attitude_config.inertia_kg_m2,
-                torque_body_nm=attitude_config.torque_body_nm,
                 sensor_axes_from_body=magnetometer_config.sensor_axes_from_body,
                 measurement_noise=_measurement_noise_from_sensor_config(magnetometer_config),
             )
@@ -295,6 +295,9 @@ def summarize_aekf_dataframe(
                 "omega_error_final_degps": float(omega_error_degps[-1]),
                 "omega_error_mean_degps": float(np.mean(omega_error_degps)),
                 "omega_error_max_degps": float(np.max(omega_error_degps)),
+                "omega_settled_below_0p005_degps_s": _settling_time_s(
+                    times_s, omega_error_degps, OMEGA_SETTLING_THRESHOLD_DEGPS
+                ),
             }
         )
 
@@ -320,6 +323,11 @@ def summarize_monte_carlo(
         "attitude_final_deg_p50": _column_quantile(summary_df, "attitude_final_deg", 0.5),
         "attitude_final_deg_p95": _column_quantile(summary_df, "attitude_final_deg", 0.95),
         "attitude_rms_deg_mean": _column_mean(summary_df, "attitude_rms_deg"),
+        "omega_error_final_degps_mean": _column_mean(summary_df, "omega_error_final_degps"),
+        "omega_error_final_degps_p50": _column_quantile(summary_df, "omega_error_final_degps", 0.5),
+        "omega_error_final_degps_p95": _column_quantile(
+            summary_df, "omega_error_final_degps", 0.95
+        ),
         "bias_final_error_norm_uT_mean": _column_mean(summary_df, "bias_final_error_norm_uT"),
         "bias_final_error_norm_uT_p50": _column_quantile(
             summary_df, "bias_final_error_norm_uT", 0.5
@@ -407,9 +415,16 @@ def write_validation_report(
     position_rows = _format_matrix(magnetometer_config.positions_body_m)
     mc_bias_p95 = monte_carlo_summary["bias_final_error_norm_uT_p95"]
     mc_nis_fraction = monte_carlo_summary["nis_central_95_fraction_mean"]
+    mc_omega_mean = monte_carlo_summary["omega_error_final_degps_mean"]
+    mc_omega_p95 = monte_carlo_summary["omega_error_final_degps_p95"]
     mc_attitude_settling_rows = _format_attitude_settling_rows(monte_carlo_summary)
     long_bias_best = long_summary["bias_best_error_norm_uT"]
     long_bias_best_time = long_summary["bias_best_time_s"]
+    long_omega_settling_s = long_summary["omega_settled_below_0p005_degps_s"]
+    long_omega_settling = (
+        "not reached" if long_omega_settling_s is None else f"{long_omega_settling_s:.1f} s"
+    )
+    omega_threshold = f"{OMEGA_SETTLING_THRESHOLD_DEGPS:g}"
     report = f"""# AEKF Validation Summary
 
 ## Scope
@@ -428,11 +443,14 @@ This validation run covers four checks:
 - Initial attitude error range: 0 to {config.initial_attitude_error_max_deg:g} deg.
 - Initial omega error std: {config.initial_omega_error_std_degps:g} deg/s per axis.
 - Initial bias estimate std: {config.initial_bias_estimate_std_uT:g} uT per axis.
+- AEKF angular-rate process-noise std: {DEFAULT_OMEGA_PROCESS_NOISE_STD_DEGPS:g} deg/s per sample.
 
 ## Monte Carlo Aggregate
 
 - Mean final attitude error: {monte_carlo_summary["attitude_final_deg_mean"]:.3f} deg.
 - 95th percentile final attitude error: {monte_carlo_summary["attitude_final_deg_p95"]:.3f} deg.
+- Mean final angular-rate error: {mc_omega_mean:.5f} deg/s.
+- 95th percentile final angular-rate error: {mc_omega_p95:.5f} deg/s.
 - Mean final bias error norm: {monte_carlo_summary["bias_final_error_norm_uT_mean"]:.3f} uT.
 - 95th percentile final bias error norm: {mc_bias_p95:.3f} uT.
 - Mean NIS over runs: {monte_carlo_summary["nis_mean_mean"]:.3f}.
@@ -449,6 +467,9 @@ This validation run covers four checks:
 - Duration: {long_summary["duration_s"]:.1f} s ({long_summary["duration_orbits"]:.2f} orbits).
 - Final attitude error: {long_summary["attitude_final_deg"]:.3f} deg.
 - RMS attitude error: {long_summary["attitude_rms_deg"]:.3f} deg.
+- Final angular-rate error: {long_summary["omega_error_final_degps"]:.5f} deg/s.
+- Mean angular-rate error: {long_summary["omega_error_mean_degps"]:.6f} deg/s.
+- Angular-rate settling below {omega_threshold} deg/s: {long_omega_settling}.
 - Final bias error norm: {long_summary["bias_final_error_norm_uT"]:.3f} uT.
 - Best bias error norm: {long_bias_best:.3f} uT at {long_bias_best_time:.1f} s.
 - Mean NIS: {long_summary["nis_mean"]:.3f}.
@@ -518,7 +539,6 @@ def _estimate_aekf(
             initial_omega_body_radps=initial_omega_radps,
             initial_magnetometer_bias_sensor_t=initial_bias_sensor_t,
             inertia_kg_m2=attitude_config.inertia_kg_m2,
-            torque_body_nm=attitude_config.torque_body_nm,
             sensor_axes_from_body=magnetometer_config.sensor_axes_from_body,
             measurement_noise=_measurement_noise_from_sensor_config(magnetometer_config),
         )

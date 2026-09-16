@@ -16,6 +16,7 @@ OMEGA_SLICE = slice(4, 7)
 MAGNETOMETER_BIAS_SLICE = slice(7, 10)
 STATE_SIZE = 10
 MEASUREMENT_SIZE = 3
+DEFAULT_OMEGA_PROCESS_NOISE_STD_DEGPS = 1.0e-5
 
 
 def _default_quaternion() -> ArrayFloat64:
@@ -53,7 +54,7 @@ def _default_process_noise() -> ArrayFloat64:
             1.0e-10,
             1.0e-10,
             1.0e-10,
-            *(np.deg2rad([1.0e-4, 1.0e-4, 1.0e-4]) ** 2),
+            *(np.deg2rad(np.full(3, DEFAULT_OMEGA_PROCESS_NOISE_STD_DEGPS)) ** 2),
             *((3.0e-10) ** 2 * np.ones(3, dtype=np.float64)),
         ],
         dtype=np.float64,
@@ -79,13 +80,11 @@ class AEKFConfig:
     initial_magnetometer_bias_sensor_t: ArrayFloat64 | None = None
     initial_magnetometer_bias_body_t: ArrayFloat64 | None = None
     inertia_kg_m2: ArrayFloat64 = field(default_factory=_default_inertia)
-    torque_body_nm: ArrayFloat64 = field(default_factory=_default_vector)
     sensor_axes_from_body: ArrayFloat64 | None = None
     rotation_sensor_from_body: ArrayFloat64 | None = None
     initial_covariance: ArrayFloat64 = field(default_factory=_default_initial_covariance)
     process_noise: ArrayFloat64 = field(default_factory=_default_process_noise)
     measurement_noise: ArrayFloat64 = field(default_factory=_default_measurement_noise)
-    jacobian_step: float = 1.0e-6
 
 
 class AEKF:
@@ -113,7 +112,6 @@ class AEKF:
             self.config.process_noise, (STATE_SIZE, STATE_SIZE), "process_noise"
         )
         self.inertia_kg_m2 = _as_matrix(self.config.inertia_kg_m2, (3, 3), "inertia_kg_m2")
-        self.torque_body_nm = _as_vector(self.config.torque_body_nm, 3, "torque_body_nm")
         self.sensor_axes_from_body = _as_sensor_axes_matrix(
             _resolve_sensor_axes(
                 self.config.sensor_axes_from_body, self.config.rotation_sensor_from_body
@@ -124,10 +122,6 @@ class AEKF:
         self.measurement_noise = _as_matrix(
             self.config.measurement_noise, (MEASUREMENT_SIZE, MEASUREMENT_SIZE), "measurement_noise"
         )
-        self.jacobian_step = float(self.config.jacobian_step)
-
-        if self.jacobian_step <= 0.0:
-            raise ValueError("jacobian_step must be positive.")
 
         _validate_covariance(self.initial_covariance, "initial_covariance", positive_definite=False)
         _validate_covariance(self.process_noise, "process_noise", positive_definite=False)
@@ -267,9 +261,7 @@ class AEKF:
         def derivative(attitude_state: ArrayFloat64) -> ArrayFloat64:
             q = normalize_quaternion(attitude_state[:4])
             omega = attitude_state[4:]
-            q_dot, omega_dot = rigid_body_derivative(
-                q, omega, self.inertia_kg_m2, self.torque_body_nm
-            )
+            q_dot, omega_dot = rigid_body_derivative(q, omega, self.inertia_kg_m2)
 
             return np.concatenate((q_dot, omega_dot))
 
@@ -373,9 +365,7 @@ class AEKF:
         state = _as_vector(attitude_state, 7, "attitude_state")
         quaternion = normalize_quaternion(state[:4])
         omega = state[4:]
-        quaternion_dot, omega_dot = rigid_body_derivative(
-            quaternion, omega, self.inertia_kg_m2, self.torque_body_nm
-        )
+        quaternion_dot, omega_dot = rigid_body_derivative(quaternion, omega, self.inertia_kg_m2)
 
         return np.concatenate((quaternion_dot, omega_dot))
 

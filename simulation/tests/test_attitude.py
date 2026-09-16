@@ -20,7 +20,6 @@ def _attitude_config(initial_omega_body_radps: np.ndarray) -> AttitudeConfig:
         inertia_kg_m2=np.diag([0.02, 0.018, 0.015]).astype(np.float64),
         initial_quaternion_eci_from_body=np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64),
         initial_omega_body_radps=np.asarray(initial_omega_body_radps, dtype=np.float64),
-        torque_body_nm=np.zeros(3, dtype=np.float64),
         integration_method="DOP853",
         rtol=1e-11,
         atol=1e-12,

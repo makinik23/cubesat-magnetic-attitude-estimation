@@ -18,13 +18,12 @@ def rigid_body_derivative(
     quaternion_eci_from_body: ArrayFloat64,
     omega_body_radps: ArrayFloat64,
     inertia_kg_m2: ArrayFloat64,
-    torque_body_nm: ArrayFloat64,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute quaternion and angular-velocity derivatives.
 
-    This solves the classical Euler rigid-body equation:
-    I * omega_dot + omega x (I * omega) = torque.
+    This solves the torque-free Euler rigid-body equation:
+    I * omega_dot + omega x (I * omega) = 0.
     """
 
     omega_quaternion = np.array([0.0, *omega_body_radps], dtype=np.float64)
@@ -32,7 +31,7 @@ def rigid_body_derivative(
 
     angular_momentum_body = inertia_kg_m2 @ omega_body_radps
     omega_dot_body = np.linalg.solve(
-        inertia_kg_m2, torque_body_nm - np.cross(omega_body_radps, angular_momentum_body)
+        inertia_kg_m2, -np.cross(omega_body_radps, angular_momentum_body)
     )
 
     return quaternion_dot, omega_dot_body
@@ -45,9 +44,7 @@ def attitude_state_derivative(
 
     quaternion = normalize_quaternion(state[:4])
     omega = state[4:]
-    quaternion_dot, omega_dot = rigid_body_derivative(
-        quaternion, omega, config.inertia_kg_m2, config.torque_body_nm
-    )
+    quaternion_dot, omega_dot = rigid_body_derivative(quaternion, omega, config.inertia_kg_m2)
 
     return np.concatenate((quaternion_dot, omega_dot))
 

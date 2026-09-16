@@ -136,11 +136,6 @@ def create_default_runner(
                     if attitude_config is None
                     else attitude_config.inertia_kg_m2
                 ),
-                torque_body_nm=(
-                    np.zeros(3, dtype=np.float64)
-                    if attitude_config is None
-                    else attitude_config.torque_body_nm
-                ),
                 sensor_axes_from_body=sensor_axes_from_body,
                 measurement_noise=_measurement_noise_from_sensor_config(magnetometer_config),
             )

@@ -182,7 +182,6 @@ class KalmanOutputTests(unittest.TestCase):
             inertia_kg_m2=np.eye(3, dtype=np.float64),
             initial_quaternion_eci_from_body=np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64),
             initial_omega_body_radps=np.zeros(3, dtype=np.float64),
-            torque_body_nm=np.zeros(3, dtype=np.float64),
             integration_method="DOP853",
             rtol=1e-9,
             atol=1e-12,

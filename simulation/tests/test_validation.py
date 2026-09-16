@@ -48,12 +48,14 @@ class AEKFValidationTests(unittest.TestCase):
         self.assertAlmostEqual(summary["bias_final_error_norm_uT"], 0.0)
         self.assertEqual(summary["nis_mean"], 3.0)
         self.assertEqual(summary["nis_central_95_fraction"], 1.0)
+        self.assertIsNone(summary["omega_settled_below_0p005_degps_s"])
 
     def test_summarize_monte_carlo_aggregates_per_run_metrics(self) -> None:
         df = pd.DataFrame(
             {
                 "attitude_final_deg": [0.5, 1.0],
                 "attitude_rms_deg": [0.7, 1.1],
+                "omega_error_final_degps": [0.001, 0.003],
                 "bias_final_error_norm_uT": [0.1, 0.2],
                 "innovation_mean_norm_uT": [1.0, 2.0],
                 "nis_mean": [2.5, 3.5],
@@ -69,6 +71,8 @@ class AEKFValidationTests(unittest.TestCase):
 
         self.assertEqual(summary["runs"], 2)
         self.assertEqual(summary["attitude_final_deg_mean"], 0.75)
+        self.assertEqual(summary["omega_error_final_degps_mean"], 0.002)
+        self.assertAlmostEqual(summary["omega_error_final_degps_p95"], 0.0029)
         self.assertEqual(summary["nis_mean_mean"], 3.0)
         self.assertEqual(summary["attitude_settled_below_1_deg_fraction"], 0.5)
         self.assertEqual(summary["attitude_settled_below_1_deg_count"], 1)

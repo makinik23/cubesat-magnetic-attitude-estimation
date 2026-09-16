@@ -187,7 +187,6 @@ def create_attitude_config_from_yaml(path: Path = DEFAULT_SATELLITE_CONFIG_PATH)
             _get_vector(attitude, "initial_quaternion_eci_from_body")
         ),
         initial_omega_body_radps=np.deg2rad(_get_vector(attitude, "initial_omega_body_degps")),
-        torque_body_nm=_get_vector(attitude, "torque_body_nm"),
         integration_method=_get_string(integration, "method"),
         rtol=_get_float(integration, "rtol"),
         atol=_get_float(integration, "atol"),
